@@ -6,9 +6,12 @@ import { LineageTree } from "./components/LineageTree";
 import { AchievementGrid } from "./components/AchievementGrid";
 import { GenomeDetail } from "./components/GenomeDetail";
 import { GameReplay } from "./components/GameReplay";
+import { Architecture } from "./components/Architecture";
 import { fetchGenomeDetail } from "./api";
 import type { GenomeSummary } from "./api";
 import "./App.css";
+
+type Tab = "evolution" | "architecture";
 
 function App() {
   const { metrics, tree, achievements, genomes, loading, refresh } =
@@ -16,6 +19,7 @@ function App() {
   const [selected, setSelected] = useState<GenomeSummary | null>(null);
   const [replayRuns, setReplayRuns] = useState<any[]>([]);
   const [replayGenomeId, setReplayGenomeId] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<Tab>("evolution");
   const detailRef = useRef<HTMLDivElement>(null);
 
   const handleSelectGenome = async (id: string) => {
@@ -50,6 +54,20 @@ function App() {
           <h1>Harness Darwinism</h1>
         </div>
         <div className="header-stats">
+          <div className="tab-switcher">
+            <button
+              className={`tab-btn ${activeTab === "evolution" ? "active" : ""}`}
+              onClick={() => setActiveTab("evolution")}
+            >
+              Evolution
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "architecture" ? "active" : ""}`}
+              onClick={() => setActiveTab("architecture")}
+            >
+              Architecture
+            </button>
+          </div>
           <div className="stat">
             <span className="stat-label">Generation</span>
             <motion.span
@@ -91,10 +109,15 @@ function App() {
         </div>
       ) : (
         <main>
-          <div className="grid-2">
+          {activeTab === "architecture" ? (
+            <Architecture />
+          ) : (
+          <>
+          <div className="grid-1">
             <FitnessCurve data={metrics} />
-            <LineageTree data={tree} onSelectGenome={handleSelectGenome} />
           </div>
+
+          <LineageTree data={tree} onSelectGenome={handleSelectGenome} />
 
           {/* Game Replay — show when a genome is selected */}
           <div ref={detailRef}>
@@ -168,6 +191,8 @@ function App() {
                 </div>
               )}
             </motion.div>
+          )}
+          </>
           )}
         </main>
       )}
