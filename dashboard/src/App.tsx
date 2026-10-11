@@ -43,6 +43,9 @@ function App() {
     metrics.length > 0 ? metrics[metrics.length - 1].generation : 0;
   const bestScore =
     metrics.length > 0 ? metrics[metrics.length - 1].best_score : 0;
+  const currentMetric = metrics.length > 0 ? metrics[metrics.length - 1] : null;
+  const evaluatedCount = currentMetric?.evaluated_count ?? 0;
+  const populationSize = currentMetric?.population_size ?? aliveGenomes.length;
 
   return (
     <div className="app">
@@ -77,8 +80,10 @@ function App() {
             </motion.span>
           </div>
           <div className="stat">
-            <span className="stat-label">Population</span>
-            <span className="stat-value">{aliveGenomes.length}</span>
+            <span className="stat-label">Evaluated</span>
+            <span className="stat-value">
+              {evaluatedCount}/{populationSize}
+            </span>
           </div>
           <button className="refresh-btn" onClick={refresh}>
             ↻ Refresh

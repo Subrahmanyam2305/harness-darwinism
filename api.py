@@ -149,9 +149,55 @@ def _serialize_run(run: dict) -> dict:
 
 @app.get("/api/metrics")
 def metrics(arm: str = "full"):
-    """Fitness curve: best/mean score per generation."""
+    """Fitness curve with a live partial point for the generation being evaluated."""
     db = get_db()
     rows = get_metrics(db, arm=arm)
+    genomes = get_all_genomes(db, arm=arm)
+    if genomes:
+        latest_generation = max(genome.generation for genome in genomes)
+        latest_population = [
+            genome
+            for genome in genomes
+            if genome.generation == latest_generation
+        ]
+        evaluated = []
+        seeds = set()
+        for genome in latest_population:
+            generation_runs = [
+                run
+                for run in get_runs_for_genome(db, genome.id)
+                if run.get("generation") == latest_generation
+            ]
+            if generation_runs:
+                evaluated.append(genome)
+                seeds.update(
+                    run.get("seed")
+                    for run in generation_runs
+                    if run.get("seed") is not None
+                )
+        if evaluated:
+            scores = [genome.fitness.score for genome in evaluated]
+            partial = {
+                "generation": latest_generation,
+                "arm": arm,
+                "best_score": max(scores),
+                "mean_score": sum(scores) / len(scores),
+                "population_size": len(latest_population),
+                "evaluated_count": len(evaluated),
+                "seeds": sorted(seeds),
+                "state": (
+                    "complete"
+                    if len(evaluated) == len(latest_population)
+                    else "evaluating"
+                ),
+            }
+            rows = [
+                row
+                for row in rows
+                if row.get("generation") != latest_generation
+            ]
+            rows.append(partial)
+            rows.sort(key=lambda row: row.get("generation", 0))
     for r in rows:
         r.pop("_id", None)
         if "timestamp" in r:

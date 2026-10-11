@@ -6,7 +6,9 @@ export interface MetricPoint {
   best_score: number;
   mean_score: number;
   population_size: number;
-  timestamp: string;
+  evaluated_count?: number;
+  state?: "evaluating" | "complete";
+  timestamp?: string;
 }
 
 export interface GenomeSummary {
