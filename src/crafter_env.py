@@ -91,11 +91,20 @@ def _info_to_text(info: dict, step: int) -> str:
         else:
             lines.append("  Nothing notable nearby, just grass.")
 
-    # Time
-    if hasattr(info, "get"):
-        sleeping = info.get("sleeping", False)
+    # Time of day
+    sleeping = info.get("sleeping", False)
+    if sleeping:
+        lines.append("\n## Status: SLEEPING")
+
+    # Light level / day-night
+    light = info.get("light_level", None)
+    if light is not None:
+        phase = "DAY" if light > 0 else "NIGHT"
+        lines.append(f"\n## Time: {phase}")
+    elif hasattr(info, "get"):
+        # Fallback
         if sleeping:
-            lines.append("\n## Status: SLEEPING")
+            pass  # already shown
 
     # Achievements so far
     unlocked = info.get("achievements", {})
@@ -108,16 +117,24 @@ def _info_to_text(info: dict, step: int) -> str:
 
 
 def _direction(dy: int, dx: int) -> str:
+    """Convert (row_delta, col_delta) to cardinal direction.
+    
+    Crafter coordinate system:
+      - row increases → move_right (east on screen)
+      - col increases → move_down (south on screen)
+      - move_up decreases col, move_left decreases row
+    So: dy (row delta) = east/west, dx (col delta) = north/south.
+    """
     if dy == 0 and dx == 0:
         return "here"
     parts = []
-    if dy < 0:
-        parts.append("north")
-    elif dy > 0:
-        parts.append("south")
     if dx < 0:
-        parts.append("west")
+        parts.append("north")
     elif dx > 0:
+        parts.append("south")
+    if dy < 0:
+        parts.append("west")
+    elif dy > 0:
         parts.append("east")
     return "-".join(parts)
 
@@ -166,12 +183,9 @@ class CrafterTextEnv:
         return self._frames
 
     def get_score(self) -> float:
-        """Crafter score: geometric mean of (success_rate + 1%) across achievements."""
-        rates = []
-        for ach in ALL_ACHIEVEMENTS:
-            rates.append(1.0 if self._achievements.get(ach) else 0.0)
-        clipped = [max(r, 0.01) for r in rates]
-        return float(np.exp(np.mean(np.log(clipped)))) * 100
+        """Per-episode score (not the aggregate Crafter score — see crafter_score())."""
+        unlocked = sum(1 for v in self._achievements.values() if v)
+        return float(unlocked)
 
     def get_achievements(self) -> dict[str, bool]:
         return dict(self._achievements)
@@ -179,3 +193,16 @@ class CrafterTextEnv:
     @property
     def step_count(self) -> int:
         return self._step_count
+
+
+def crafter_score(achievement_rates: dict[str, float]) -> float:
+    """Upstream Crafter aggregate score: exp(mean(log(1 + 100*rate))) - 1.
+    
+    See: https://github.com/danijar/crafter/blob/main/analysis/common.py
+    achievement_rates: {achievement_name: success_rate} where rate is 0.0-1.0
+    """
+    rates = []
+    for ach in ALL_ACHIEVEMENTS:
+        rate = achievement_rates.get(ach, 0.0)
+        rates.append(np.log(1 + 100 * rate))
+    return float(np.exp(np.mean(rates)) - 1)

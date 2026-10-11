@@ -55,40 +55,69 @@ def _build_system_prompt(genome: Genome) -> str:
     return "\n".join(parts)
 
 
-def _parse_action(response: str) -> str:
-    """Extract action from LLM response, with fallback."""
+def _parse_action(response: str, allowed_actions: list[str] | None = None) -> str:
+    """Extract action from LLM response, validating against allowed actions."""
+    valid = set(allowed_actions) if allowed_actions else set(ACTIONS)
     try:
         match = re.search(r'\{[^}]+\}', response)
         if match:
             data = json.loads(match.group())
             action = data.get("action", "noop")
-            if action in ACTIONS:
+            if action in valid:
                 return action
     except (json.JSONDecodeError, KeyError):
         pass
 
     for action in ACTIONS:
-        if action in response.lower():
+        if action in response.lower() and action in valid:
             return action
     return "noop"
+
+
+def _extract_thought(response: str) -> str:
+    """Extract the thought field from LLM JSON response."""
+    try:
+        match = re.search(r'\{[^}]+\}', response)
+        if match:
+            data = json.loads(match.group())
+            return data.get("thought", "")
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return ""
 
 
 def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrace:
     """Run one Crafter episode with the given genome's harness."""
     env = CrafterTextEnv(seed=seed, max_steps=max_steps)
     system_prompt = _build_system_prompt(genome)
+    allowed_actions = genome.genome.tools
 
     messages: list[dict] = []
     history: list[dict] = []
     notes: list[str] = []
+    memory_type = genome.genome.memory_policy.type
 
     obs = env.reset()
+    prev_action = None
+    prev_reward = 0.0
 
     while True:
         user_parts = [f"Observation:\n{obs}"]
-        if notes:
+
+        # Memory: implement all three modes
+        if memory_type == "notes" and notes:
             max_notes = genome.genome.memory_policy.max_items
             user_parts.append("\nYour notes:\n" + "\n".join(f"- {n}" for n in notes[-max_notes:]))
+        elif memory_type == "summary" and notes:
+            max_notes = genome.genome.memory_policy.max_items
+            recent = notes[-max_notes:]
+            user_parts.append(f"\nMemory summary ({len(recent)} events): " + "; ".join(recent))
+        # memory_type == "none": no memory shown
+
+        if prev_action is not None:
+            outcome = f"reward +{prev_reward}" if prev_reward > 0 else "no reward"
+            user_parts.append(f"\nPrevious action: {prev_action} → {outcome}")
+
         user_parts.append(f"\nStep {env.step_count + 1}/{max_steps}. Choose your action.")
 
         user_msg = "\n".join(user_parts)
@@ -110,22 +139,28 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
             reply = '{"action": "noop"}'
             history.append({"step": env.step_count, "error": str(e)})
 
-        action = _parse_action(reply)
+        action = _parse_action(reply, allowed_actions)
 
         messages.append({"role": "user", "content": user_msg})
         messages.append({"role": "assistant", "content": reply})
 
         obs, reward, done, info = env.step(action)
 
+        # Structured trace entry
         history.append({
             "step": env.step_count,
             "action": action,
             "reward": reward,
-            "obs_snippet": obs[:200],
+            "obs_snippet": obs[:300],
+            "thought": _extract_thought(reply),
+            "prev_action": prev_action,
         })
 
+        prev_action = action
+        prev_reward = reward
+
         if reward > 0:
-            notes.append(f"Step {env.step_count}: got reward {reward} from {action}")
+            notes.append(f"Step {env.step_count}: reward +{reward} from {action}")
         if "health=1" in obs or "health=2" in obs:
             notes.append(f"Step {env.step_count}: critically low health!")
 

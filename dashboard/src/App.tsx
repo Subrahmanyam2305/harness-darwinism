@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEvolutionData } from "./hooks/useEvolutionData";
 import { FitnessCurve } from "./components/FitnessCurve";
@@ -16,6 +16,7 @@ function App() {
   const [selected, setSelected] = useState<GenomeSummary | null>(null);
   const [replayRuns, setReplayRuns] = useState<any[]>([]);
   const [replayGenomeId, setReplayGenomeId] = useState<string>("");
+  const detailRef = useRef<HTMLDivElement>(null);
 
   const handleSelectGenome = async (id: string) => {
     const g = genomes.find((g) => g.id === id) ?? null;
@@ -25,6 +26,10 @@ function App() {
       const detail = await fetchGenomeDetail(id);
       setReplayRuns(detail.runs || []);
       setReplayGenomeId(id);
+      // Auto-scroll to detail after a brief render delay
+      setTimeout(() => {
+        detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
     } catch {
       setReplayRuns([]);
     }
@@ -92,6 +97,7 @@ function App() {
           </div>
 
           {/* Game Replay — show when a genome is selected */}
+          <div ref={detailRef}>
           <AnimatePresence>
             {replayRuns.length > 0 && (
               <motion.div
@@ -131,6 +137,7 @@ function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </div>
 
           {champion && !selected && (
             <motion.div

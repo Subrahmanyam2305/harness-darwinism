@@ -6,6 +6,7 @@ interface Step {
   action: string;
   reward: number;
   obs_snippet: string;
+  thought?: string;
 }
 
 interface Run {
@@ -26,14 +27,30 @@ interface Props {
 
 const API_BASE = "http://localhost:8001";
 
+function pickDefaultRun(runs: Run[]): Run | null {
+  if (!runs.length) return null;
+  // Prefer a run that has a GIF, then highest score
+  const withGif = runs.filter((r) => r.gif_path);
+  if (withGif.length) return withGif.sort((a, b) => b.score - a.score)[0];
+  return runs.sort((a, b) => b.score - a.score)[0];
+}
+
 export function GameReplay({ runs, genomeId }: Props) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(
-    runs.length > 0 ? runs[0] : null
+    pickDefaultRun(runs)
   );
   const [steps, setSteps] = useState<Step[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Re-pick default run when genome changes
+  useEffect(() => {
+    setSelectedRun(pickDefaultRun(runs));
+    setSteps([]);
+    setCurrentStep(0);
+    setPlaying(false);
+  }, [genomeId, runs]);
 
   useEffect(() => {
     if (!selectedRun) return;
@@ -105,7 +122,7 @@ export function GameReplay({ runs, genomeId }: Props) {
 
       {/* Video + Text side by side */}
       <div style={{ display: "grid", gridTemplateColumns: gifUrl ? "256px 1fr" : "1fr", gap: 20 }}>
-        {/* GIF replay */}
+        {/* Frame-synced replay */}
         {gifUrl && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -120,7 +137,11 @@ export function GameReplay({ runs, genomeId }: Props) {
             }}
           >
             <img
-              src={gifUrl}
+              src={
+                steps.length > 0
+                  ? `${API_BASE}/api/frame/${selectedRun?.gif_path}/${currentStep}`
+                  : gifUrl
+              }
               alt={`Crafter replay: ${genomeId} seed ${selectedRun?.seed}`}
               style={{ width: 256, height: 256, display: "block", imageRendering: "pixelated" }}
             />
@@ -134,7 +155,7 @@ export function GameReplay({ runs, genomeId }: Props) {
                 justifyContent: "space-between",
               }}
             >
-              <span>Seed {selectedRun?.seed}</span>
+              <span>Seed {selectedRun?.seed} — Step {currentStep + 1}</span>
               <span style={{ color: "var(--green)", fontWeight: 600 }}>
                 Score {selectedRun?.score?.toFixed(1)}
               </span>
