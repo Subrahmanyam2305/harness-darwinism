@@ -59,7 +59,9 @@ def llm_mutate(
     traces_text = "\n---\n".join(failure_traces[:3])
     tried_text = ""
     if tried_edits:
-        tried_text = f"\n\n## Already Tried (DO NOT repeat these)\n" + "\n".join(f"- {e}" for e in tried_edits[-10:])
+        tried_text = "\n\n## Already Tried (DO NOT repeat these)\n" + "\n".join(
+            f"- {e}" for e in tried_edits[-10:]
+        )
 
     prompt = f"""You are an evolution operator. Improve an agent's configuration based on its failure traces.
 
@@ -100,7 +102,7 @@ Respond with ONLY a JSON object:
     )
 
     try:
-        match = re.search(r'\{[\s\S]+\}', resp)
+        match = re.search(r"\{[\s\S]+\}", resp)
         if match:
             data = json.loads(match.group())
             config = GenomeConfig(**data.get("config", data))
@@ -115,7 +117,7 @@ Respond with ONLY a JSON object:
 def _parse_genome_config(raw: str) -> GenomeConfig:
     """Parse LLM output into a GenomeConfig, with fallback."""
     try:
-        match = re.search(r'\{[\s\S]+\}', raw)
+        match = re.search(r"\{[\s\S]+\}", raw)
         if match:
             data = json.loads(match.group())
             return GenomeConfig(**data)

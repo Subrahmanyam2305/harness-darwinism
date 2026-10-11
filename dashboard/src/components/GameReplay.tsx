@@ -10,6 +10,7 @@ interface Step {
 }
 
 interface Run {
+  id?: string;
   genome_id: string;
   seed: number;
   score: number;
@@ -17,6 +18,8 @@ interface Run {
   failure_summary: string;
   history_len: number;
   gif_path?: string;
+  replay_url?: string;
+  frame_url?: string;
   history?: Step[];
 }
 
@@ -30,9 +33,9 @@ const API_BASE = "http://localhost:8001";
 function pickDefaultRun(runs: Run[]): Run | null {
   if (!runs.length) return null;
   // Prefer a run that has a GIF, then highest score
-  const withGif = runs.filter((r) => r.gif_path);
-  if (withGif.length) return withGif.sort((a, b) => b.score - a.score)[0];
-  return runs.sort((a, b) => b.score - a.score)[0];
+  const withGif = runs.filter((r) => r.replay_url || r.gif_path);
+  if (withGif.length) return [...withGif].sort((a, b) => b.score - a.score)[0];
+  return [...runs].sort((a, b) => b.score - a.score)[0];
 }
 
 export function GameReplay({ runs, genomeId }: Props) {
@@ -62,7 +65,9 @@ export function GameReplay({ runs, genomeId }: Props) {
     fetch(`${API_BASE}/api/genomes/${selectedRun.genome_id}`)
       .then((r) => r.json())
       .then((data) => {
-        const run = data.runs?.find((r: any) => r.seed === selectedRun.seed);
+        const run = data.runs?.find((candidate: Run) =>
+          selectedRun.id ? candidate.id === selectedRun.id : candidate.seed === selectedRun.seed
+        );
         if (run?.history) {
           setSteps(run.history);
           setCurrentStep(0);
@@ -95,9 +100,16 @@ export function GameReplay({ runs, genomeId }: Props) {
 
   if (!runs.length) return null;
 
-  const gifUrl = selectedRun?.gif_path
-    ? `${API_BASE}/replays/${selectedRun.gif_path}`
-    : null;
+  const gifUrl = selectedRun?.replay_url
+    ? `${API_BASE}${selectedRun.replay_url}`
+    : selectedRun?.gif_path
+      ? `${API_BASE}/replays/${selectedRun.gif_path}`
+      : null;
+  const frameUrl = selectedRun?.frame_url
+    ? `${API_BASE}${selectedRun.frame_url}`
+    : selectedRun?.gif_path
+      ? `${API_BASE}/api/frame/${selectedRun.gif_path}`
+      : null;
 
   return (
     <div className="panel replay-panel">
@@ -106,7 +118,7 @@ export function GameReplay({ runs, genomeId }: Props) {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {runs.map((run) => (
             <button
-              key={run.seed}
+              key={run.id ?? run.seed}
               className={`replay-btn ${selectedRun?.seed === run.seed ? "active" : ""}`}
               onClick={() => {
                 setSelectedRun(run);
@@ -138,8 +150,8 @@ export function GameReplay({ runs, genomeId }: Props) {
           >
             <img
               src={
-                steps.length > 0
-                  ? `${API_BASE}/api/frame/${selectedRun?.gif_path}/${currentStep}`
+                steps.length > 0 && frameUrl
+                  ? `${frameUrl}/${currentStep}`
                   : gifUrl
               }
               alt={`Crafter replay: ${genomeId} seed ${selectedRun?.seed}`}

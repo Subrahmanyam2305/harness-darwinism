@@ -9,7 +9,10 @@ class Settings(BaseSettings):
     # Bedrock models
     agent_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     meta_model: str = "us.anthropic.claude-opus-4-6-v1"
-    aws_region: str = "us-east-1"
+    aws_default_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_session_token: str = ""
 
     # MongoDB
     mongodb_uri: str = "mongodb://localhost:27017"
@@ -29,7 +32,11 @@ class Settings(BaseSettings):
     # Paths
     project_root: Path = Path(__file__).resolve().parent.parent
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

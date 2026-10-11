@@ -21,14 +21,28 @@ class ContextBudget(BaseModel):
 class GenomeConfig(BaseModel):
     """The mutable part of a harness — this is what evolves."""
 
-    system_prompt: str = "You are a Crafter survival agent. Stay alive and unlock achievements."
+    system_prompt: str = (
+        "You are a Crafter survival agent. Stay alive and unlock achievements."
+    )
     rules: list[str] = Field(default_factory=list)
     tools: list[str] = Field(
         default_factory=lambda: [
-            "noop", "move_left", "move_right", "move_up", "move_down",
-            "do", "sleep", "place_stone", "place_table", "place_furnace",
-            "place_plant", "make_wood_pickaxe", "make_stone_pickaxe",
-            "make_iron_pickaxe", "make_wood_sword", "make_stone_sword",
+            "noop",
+            "move_left",
+            "move_right",
+            "move_up",
+            "move_down",
+            "do",
+            "sleep",
+            "place_stone",
+            "place_table",
+            "place_furnace",
+            "place_plant",
+            "make_wood_pickaxe",
+            "make_stone_pickaxe",
+            "make_iron_pickaxe",
+            "make_wood_sword",
+            "make_stone_sword",
             "make_iron_sword",
         ]
     )

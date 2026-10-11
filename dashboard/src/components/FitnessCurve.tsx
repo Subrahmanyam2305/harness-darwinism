@@ -1,7 +1,5 @@
 import { motion } from "framer-motion";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,

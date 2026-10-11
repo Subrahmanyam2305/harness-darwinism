@@ -6,36 +6,100 @@ import crafter
 import numpy as np
 
 ACTIONS = [
-    "noop", "move_left", "move_right", "move_up", "move_down",
-    "do", "sleep", "place_stone", "place_table", "place_furnace",
-    "place_plant", "make_wood_pickaxe", "make_stone_pickaxe",
-    "make_iron_pickaxe", "make_wood_sword", "make_stone_sword",
+    "noop",
+    "move_left",
+    "move_right",
+    "move_up",
+    "move_down",
+    "do",
+    "sleep",
+    "place_stone",
+    "place_table",
+    "place_furnace",
+    "place_plant",
+    "make_wood_pickaxe",
+    "make_stone_pickaxe",
+    "make_iron_pickaxe",
+    "make_wood_sword",
+    "make_stone_sword",
     "make_iron_sword",
 ]
 
 ACTION_TO_IDX = {a: i for i, a in enumerate(ACTIONS)}
 
 ALL_ACHIEVEMENTS = [
-    "collect_coal", "collect_diamond", "collect_drink", "collect_iron",
-    "collect_sapling", "collect_stone", "collect_wood", "defeat_skeleton",
-    "defeat_zombie", "eat_cow", "eat_plant", "make_iron_pickaxe",
-    "make_iron_sword", "make_stone_pickaxe", "make_stone_sword",
-    "make_wood_pickaxe", "make_wood_sword", "place_furnace", "place_plant",
-    "place_stone", "place_table", "wake_up",
+    "collect_coal",
+    "collect_diamond",
+    "collect_drink",
+    "collect_iron",
+    "collect_sapling",
+    "collect_stone",
+    "collect_wood",
+    "defeat_skeleton",
+    "defeat_zombie",
+    "eat_cow",
+    "eat_plant",
+    "make_iron_pickaxe",
+    "make_iron_sword",
+    "make_stone_pickaxe",
+    "make_stone_sword",
+    "make_wood_pickaxe",
+    "make_wood_sword",
+    "place_furnace",
+    "place_plant",
+    "place_stone",
+    "place_table",
+    "wake_up",
 ]
 
 MATERIAL_NAMES = {
-    0: None, 1: "water", 2: "grass", 3: "stone", 4: "path",
-    5: "sand", 6: "tree", 7: "lava", 8: "coal", 9: "iron",
-    10: "diamond", 11: "table", 12: "furnace",
+    0: None,
+    1: "water",
+    2: "grass",
+    3: "stone",
+    4: "path",
+    5: "sand",
+    6: "tree",
+    7: "lava",
+    8: "coal",
+    9: "iron",
+    10: "diamond",
+    11: "table",
+    12: "furnace",
 }
 
 OBJECT_NAMES = {
-    13: "player", 14: "cow", 15: "zombie", 16: "skeleton",
-    17: "arrow", 18: "plant",
+    13: "player",
+    14: "cow",
+    15: "zombie",
+    16: "skeleton",
+    17: "arrow",
+    18: "plant",
 }
 
 SEMANTIC_NAMES = {**MATERIAL_NAMES, **OBJECT_NAMES}
+
+SEMANTIC_SYMBOLS = {
+    0: "?",
+    1: "~",
+    2: ".",
+    3: "#",
+    4: ":",
+    5: "s",
+    6: "T",
+    7: "L",
+    8: "c",
+    9: "i",
+    10: "d",
+    11: "B",
+    12: "F",
+    13: "@",
+    14: "C",
+    15: "Z",
+    16: "K",
+    17: ">",
+    18: "P",
+}
 
 
 def _info_to_text(info: dict, step: int) -> str:
@@ -48,7 +112,11 @@ def _info_to_text(info: dict, step: int) -> str:
     vitals = []
     for key in ["health", "food", "drink", "energy"]:
         val = inv.get(key, "?")
-        bar = "█" * int(val) + "░" * (9 - int(val)) if isinstance(val, (int, float)) else ""
+        bar = (
+            "█" * int(val) + "░" * (9 - int(val))
+            if isinstance(val, (int, float))
+            else ""
+        )
         vitals.append(f"{key}: {val}/9 {bar}")
     lines.append("## Vitals")
     lines.extend(vitals)
@@ -66,17 +134,34 @@ def _info_to_text(info: dict, step: int) -> str:
     semantic = info.get("semantic", None)
     player_pos = info.get("player_pos", None)
     if semantic is not None and player_pos is not None:
-        py, px = int(player_pos[0]), int(player_pos[1])
-        lines.append("\n## Surroundings (7×7 grid, you are at center)")
+        px, py = int(player_pos[0]), int(player_pos[1])
+        lines.append("\n## Surroundings (9×7 grid, you are at center)")
+
+        lines.append("North is up; west is left:")
+        for dy in range(-3, 4):
+            row = []
+            for dx in range(-4, 5):
+                x, y = px + dx, py + dy
+                if dx == 0 and dy == 0:
+                    row.append("@")
+                elif 0 <= x < semantic.shape[0] and 0 <= y < semantic.shape[1]:
+                    row.append(SEMANTIC_SYMBOLS.get(int(semantic[x, y]), "?"))
+                else:
+                    row.append(" ")
+            lines.append("  " + "".join(row))
+        lines.append(
+            "Legend: @ you, T tree, ~ water, # stone, : path, s sand, L lava, "
+            "B table, F furnace, C cow, Z zombie, K skeleton, P plant"
+        )
 
         nearby_items: dict[str, list[str]] = {}
         for dy in range(-3, 4):
-            for dx in range(-3, 4):
+            for dx in range(-4, 5):
                 if dy == 0 and dx == 0:
                     continue
                 y, x = py + dy, px + dx
-                if 0 <= y < semantic.shape[0] and 0 <= x < semantic.shape[1]:
-                    sid = int(semantic[y, x])
+                if 0 <= x < semantic.shape[0] and 0 <= y < semantic.shape[1]:
+                    sid = int(semantic[x, y])
                     name = SEMANTIC_NAMES.get(sid)
                     if name and name != "grass" and name != "path":
                         direction = _direction(dy, dx)
@@ -91,20 +176,17 @@ def _info_to_text(info: dict, step: int) -> str:
         else:
             lines.append("  Nothing notable nearby, just grass.")
 
-    # Time of day
-    sleeping = info.get("sleeping", False)
-    if sleeping:
-        lines.append("\n## Status: SLEEPING")
+    facing = info.get("facing")
+    if facing is not None:
+        lines.append(f"\n## Facing: {_direction(int(facing[1]), int(facing[0]))}")
+    if "daylight" in info:
+        lines.append(f"Daylight: {float(info['daylight']):.2f}")
 
-    # Light level / day-night
-    light = info.get("light_level", None)
-    if light is not None:
-        phase = "DAY" if light > 0 else "NIGHT"
-        lines.append(f"\n## Time: {phase}")
-    elif hasattr(info, "get"):
-        # Fallback
+    # Time
+    if hasattr(info, "get"):
+        sleeping = info.get("sleeping", False)
         if sleeping:
-            pass  # already shown
+            lines.append("\n## Status: SLEEPING")
 
     # Achievements so far
     unlocked = info.get("achievements", {})
@@ -117,24 +199,16 @@ def _info_to_text(info: dict, step: int) -> str:
 
 
 def _direction(dy: int, dx: int) -> str:
-    """Convert (row_delta, col_delta) to cardinal direction.
-    
-    Crafter coordinate system:
-      - row increases → move_right (east on screen)
-      - col increases → move_down (south on screen)
-      - move_up decreases col, move_left decreases row
-    So: dy (row delta) = east/west, dx (col delta) = north/south.
-    """
     if dy == 0 and dx == 0:
         return "here"
     parts = []
-    if dx < 0:
-        parts.append("north")
-    elif dx > 0:
-        parts.append("south")
     if dy < 0:
-        parts.append("west")
+        parts.append("north")
     elif dy > 0:
+        parts.append("south")
+    if dx < 0:
+        parts.append("west")
+    elif dx > 0:
         parts.append("east")
     return "-".join(parts)
 
@@ -143,30 +217,43 @@ class CrafterTextEnv:
     """Wraps Crafter to expose text observations and string actions."""
 
     def __init__(self, seed: int | None = None, max_steps: int = 200):
+        if max_steps <= 0:
+            raise ValueError("max_steps must be positive")
         self.env = crafter.Env(size=(64, 64), seed=seed)
         self.max_steps = max_steps
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements: dict[str, bool] = {a: False for a in ALL_ACHIEVEMENTS}
-        self._frames: list[np.ndarray] = []
+        self._done = True
+        self.info: dict = {}
 
     def reset(self) -> str:
-        obs = self.env.reset()
+        self.env.reset()
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements = {a: False for a in ALL_ACHIEVEMENTS}
-        self._frames = [obs.copy()]
-        # Do a noop step to get info
-        _, _, _, info = self.env.step(0)
-        self._step_count = 0  # don't count the noop
-        return _info_to_text(info, 0)
+        player = self.env._player
+        self.info = {
+            "inventory": player.inventory.copy(),
+            "achievements": player.achievements.copy(),
+            "semantic": self.env._sem_view(),
+            "player_pos": player.pos.copy(),
+            "sleeping": bool(player.sleeping),
+            "facing": tuple(player.facing),
+            "daylight": float(self.env._world.daylight),
+        }
+        self._done = False
+        return _info_to_text(self.info, 0)
 
     def step(self, action_name: str) -> tuple[str, float, bool, dict]:
-        idx = ACTION_TO_IDX.get(action_name, 0)
-        obs, reward, done, info = self.env.step(idx)
+        if self._done:
+            raise RuntimeError("Reset before stepping a terminal environment")
+        if action_name not in ACTION_TO_IDX:
+            raise ValueError(f"Unknown action: {action_name}")
+        idx = ACTION_TO_IDX[action_name]
+        _obs, reward, done, info = self.env.step(idx)
         self._step_count += 1
         self._total_reward += reward
-        self._frames.append(obs.copy())
 
         for ach in ALL_ACHIEVEMENTS:
             if info.get("achievements", {}).get(ach, False):
@@ -175,17 +262,35 @@ class CrafterTextEnv:
         if self._step_count >= self.max_steps:
             done = True
 
+        info.update(
+            {
+                "sleeping": bool(self.env._player.sleeping),
+                "facing": tuple(self.env._player.facing),
+                "daylight": float(self.env._world.daylight),
+            }
+        )
+        self.info = info
+        self._done = bool(done)
+
         text_obs = _info_to_text(info, self._step_count)
         return text_obs, reward, done, info
 
-    @property
-    def frames(self) -> list[np.ndarray]:
-        return self._frames
-
     def get_score(self) -> float:
-        """Per-episode score (not the aggregate Crafter score — see crafter_score())."""
-        unlocked = sum(1 for v in self._achievements.values() if v)
-        return float(unlocked)
+        """Return upstream Crafter score for this episode's binary percentages."""
+        percents = [
+            100.0 if self._achievements.get(achievement) else 0.0
+            for achievement in ALL_ACHIEVEMENTS
+        ]
+        return float(np.expm1(np.mean(np.log1p(percents))))
+
+    def render(self) -> np.ndarray:
+        """Render a frame without allowing display noise to alter gameplay RNG."""
+        rng = self.env._world.random
+        state = rng.get_state()
+        try:
+            return self.env.render(size=(512, 512)).copy()
+        finally:
+            rng.set_state(state)
 
     def get_achievements(self) -> dict[str, bool]:
         return dict(self._achievements)
@@ -193,16 +298,3 @@ class CrafterTextEnv:
     @property
     def step_count(self) -> int:
         return self._step_count
-
-
-def crafter_score(achievement_rates: dict[str, float]) -> float:
-    """Upstream Crafter aggregate score: exp(mean(log(1 + 100*rate))) - 1.
-    
-    See: https://github.com/danijar/crafter/blob/main/analysis/common.py
-    achievement_rates: {achievement_name: success_rate} where rate is 0.0-1.0
-    """
-    rates = []
-    for ach in ALL_ACHIEVEMENTS:
-        rate = achievement_rates.get(ach, 0.0)
-        rates.append(np.log(1 + 100 * rate))
-    return float(np.exp(np.mean(rates)) - 1)

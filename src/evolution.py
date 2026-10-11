@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import random
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from rich.console import Console
@@ -12,19 +11,18 @@ from rich.table import Table
 
 from src.agent import EpisodeTrace, play_episode
 from src.config import settings
-from src.crafter_env import crafter_score
 from src.db import (
     ensure_indexes,
     get_archive,
     get_db,
     get_failure_traces,
-    get_generation,
     insert_run,
     ledger_add,
     ledger_check,
     record_metrics,
     upsert_genome,
 )
+from src.evaluator import summarize_traces
 from src.genome import Fitness, Genome, GenomeConfig
 from src.meta_agent import llm_crossover, llm_mutate
 
@@ -68,38 +66,33 @@ def seed_population(n: int = 10) -> list[Genome]:
 
 # ── Evaluation ──
 
-def evaluate_genome(genome: Genome, seeds: list[int]) -> tuple[Fitness, list[EpisodeTrace]]:
+
+def evaluate_genome(
+    genome: Genome, seeds: list[int]
+) -> tuple[Fitness, list[EpisodeTrace]]:
     """Play multiple seeds, return aggregate fitness and traces."""
     traces: list[EpisodeTrace] = []
-    scores: list[float] = []
-    all_achievements: dict[str, list[float]] = {}
-    total_steps = 0
-
     for seed in seeds:
         console.print(f"  [dim]Playing seed {seed}...[/dim]", end=" ")
         trace = play_episode(genome, seed, max_steps=settings.max_steps_per_episode)
         traces.append(trace)
-        scores.append(trace.score)
-        total_steps += trace.steps
         console.print(f"score={trace.score:.1f}, steps={trace.steps}")
 
-        for ach, val in trace.achievements.items():
-            all_achievements.setdefault(ach, []).append(1.0 if val else 0.0)
-
-    achievement_rates = {k: float(np.mean(v)) for k, v in all_achievements.items()}
-
-    # Use upstream Crafter scoring: exp(mean(log(1 + 100*rate))) - 1
-    aggregate_score = crafter_score(achievement_rates)
+    evaluation = summarize_traces(traces)
+    if not evaluation.complete or evaluation.score is None:
+        raise RuntimeError(f"Incomplete evaluation for {genome.id}: agent_error")
 
     fitness = Fitness(
-        score=aggregate_score,
-        achievements=achievement_rates,
-        mean_steps=total_steps / len(seeds),
+        score=evaluation.score,
+        achievements=evaluation.achievement_rates,
+        mean_steps=evaluation.mean_steps,
+        cost_usd=evaluation.cost_usd or 0.0,
     )
     return fitness, traces
 
 
 # ── Selection ──
+
 
 def select_and_archive(
     population: list[Genome],
@@ -117,6 +110,7 @@ def select_and_archive(
 
 
 # ── Pairing ──
+
 
 def weighted_pairs(
     parents: list[Genome],
@@ -146,6 +140,7 @@ def weighted_pairs(
 
 # ── One generation ──
 
+
 def run_generation(
     gen: int,
     population: list[Genome],
@@ -166,20 +161,21 @@ def run_generation(
         genome.fitness = fitness
 
         for trace in traces:
-            insert_run(db, {
-                "genome_id": genome.id,
-                "generation": gen,
-                "seed": trace.seed,
-                "score": trace.score,
-                "achievements": trace.achievements,
-                "steps": trace.steps,
-                "failure_summary": trace.failure_summary,
-                "history": trace.history,
-                "history_len": len(trace.history),
-                "gif_path": trace.gif_path,
-                "arm": genome.arm,
-                "timestamp": datetime.now(timezone.utc),
-            })
+            insert_run(
+                db,
+                {
+                    "genome_id": genome.id,
+                    "generation": gen,
+                    "seed": trace.seed,
+                    "score": trace.score,
+                    "achievements": trace.achievements,
+                    "steps": trace.steps,
+                    "failure_summary": trace.failure_summary,
+                    "history_len": len(trace.history),
+                    "arm": genome.arm,
+                    "timestamp": datetime.now(UTC),
+                },
+            )
 
         upsert_genome(db, genome)
 
@@ -205,9 +201,7 @@ def run_generation(
     pairs = weighted_pairs(survivors, archive, n_children)
 
     children: list[Genome] = []
-    child_idx = 0
-
-    for parent_a, parent_b in pairs:
+    for child_idx, (parent_a, parent_b) in enumerate(pairs):
         console.print(f"  Crossing {parent_a.id} × {parent_b.id}...", end=" ")
 
         child_config = llm_crossover(parent_a.genome, parent_b.genome)
@@ -239,30 +233,22 @@ def run_generation(
         children.append(child)
         upsert_genome(db, child)
         console.print(f"→ {child.id}: {mutation_note}")
-        child_idx += 1
 
-    # Promote survivors to next generation — preserve original identity
-    # Survivors carry forward as-is; their original id/generation stays intact
-    # so lineage is traceable. Create lightweight references for the next round.
-    next_population = list(children)
-    for g in survivors:
-        # Clone survivor with new generation ID but keep parents pointing to original
-        promoted = Genome(
-            id=make_id(gen + 1, n_children + survivors.index(g)),
-            generation=gen + 1,
-            parents=[g.id],
-            genome=g.genome.model_copy(),
-            fitness=g.fitness.model_copy(),
-            mutation_note=f"Carried forward from {g.id}",
-            arm=g.arm,
-        )
-        upsert_genome(db, promoted)
-        next_population.append(promoted)
+    # Promote survivors to next generation
+    next_population = []
+    for i, g in enumerate(survivors):
+        g.generation = gen + 1
+        g.id = make_id(gen + 1, n_children + i)
+        upsert_genome(db, g)
+        next_population.append(g)
+
+    next_population = children + next_population
 
     # 4. Record metrics
     scores = [g.fitness.score for g in population]
     record_metrics(
-        db, gen,
+        db,
+        gen,
         arm=population[0].arm if population else "full",
         best_score=max(scores),
         mean_score=float(np.mean(scores)),
@@ -282,7 +268,9 @@ def _print_scoreboard(population: list[Genome], gen: int) -> None:
 
     ranked = sorted(population, key=lambda g: g.fitness.score, reverse=True)
     for g in ranked:
-        top_ach = max(g.fitness.achievements.items(), key=lambda x: x[1], default=("none", 0))
+        top_ach = max(
+            g.fitness.achievements.items(), key=lambda x: x[1], default=("none", 0)
+        )
         table.add_row(
             g.id,
             f"{g.fitness.score:.1f}",
@@ -294,6 +282,7 @@ def _print_scoreboard(population: list[Genome], gen: int) -> None:
 
 
 # ── Full evolution run ──
+
 
 def run_evolution(
     max_generations: int | None = None,
@@ -311,13 +300,17 @@ def run_evolution(
     for g in population:
         upsert_genome(db, g)
 
-    console.print(f"[bold green]Starting evolution: {max_gen} generations, pop={settings.population_size}[/bold green]\n")
+    console.print(
+        f"[bold green]Starting evolution: {max_gen} generations, pop={settings.population_size}[/bold green]\n"
+    )
 
     best_score = 0.0
     stale_count = 0
 
     for gen in range(max_gen):
-        seeds = random.sample(all_train_seeds, min(settings.seeds_per_gen, len(all_train_seeds)))
+        seeds = random.sample(
+            all_train_seeds, min(settings.seeds_per_gen, len(all_train_seeds))
+        )
         population = run_generation(gen, population, seeds, db)
 
         gen_best = max(g.fitness.score for g in population)
@@ -328,7 +321,9 @@ def run_evolution(
             stale_count += 1
 
         if stale_count >= 3:
-            console.print("[yellow]No improvement for 3 generations — stopping early.[/yellow]")
+            console.print(
+                "[yellow]No improvement for 3 generations — stopping early.[/yellow]"
+            )
             break
 
     # Crown champion
@@ -336,7 +331,9 @@ def run_evolution(
     champion.status = "champion"
     upsert_genome(db, champion)
 
-    console.print(f"\n[bold green]🏆 Champion: {champion.id} — score={champion.fitness.score:.1f}[/bold green]")
+    console.print(
+        f"\n[bold green]🏆 Champion: {champion.id} — score={champion.fitness.score:.1f}[/bold green]"
+    )
     console.print(f"Rules: {champion.genome.rules}")
 
     return champion

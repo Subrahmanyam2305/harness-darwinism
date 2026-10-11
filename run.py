@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
 
 from rich.console import Console
 
@@ -14,10 +18,11 @@ console = Console()
 def cmd_evolve(args):
     """Run the full evolution loop."""
     from src.evolution import run_evolution
+
     champion = run_evolution(
         max_generations=args.generations,
     )
-    console.print(f"\n[bold]Champion rules:[/bold]")
+    console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
         console.print(f"  {i}. {rule}")
 
@@ -25,27 +30,128 @@ def cmd_evolve(args):
 def cmd_eval_held_out(args):
     """Evaluate the champion on held-out seeds."""
     from src.db import get_db
-    from src.evolution import evaluate_genome
-    from src.genome import Genome
+    from src.evaluator import evaluate_harness
 
     db = get_db()
     from src.db import get_genome
+
     champion = get_genome(db, args.genome_id)
     if not champion:
         console.print(f"[red]Genome {args.genome_id} not found[/red]")
         sys.exit(1)
 
-    held_out_seeds = list(range(200, 230))
-    console.print(f"[bold]Evaluating {champion.id} on {len(held_out_seeds)} held-out seeds[/bold]")
-    fitness, traces = evaluate_genome(champion, held_out_seeds)
-    console.print(f"\n[bold green]Held-out score: {fitness.score:.1f}[/bold green]")
-    console.print(f"Achievements: {fitness.achievements}")
+    held_out_seeds = args.seeds or list(range(200, 230))
+    console.print(
+        f"[bold]Evaluating {champion.id} on {len(held_out_seeds)} held-out seeds[/bold]"
+    )
+    result = evaluate_harness(champion, held_out_seeds, max_steps=args.max_steps)
+    output = args.output or _default_output(f"heldout-{champion.id}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result.to_dict(), indent=2))
+    if not result.complete:
+        console.print(
+            "[red]Held-out evaluation incomplete because an episode ended with agent_error[/red]"
+        )
+        sys.exit(2)
+    console.print(f"\n[bold green]Held-out score: {result.score:.1f}[/bold green]")
+    console.print(f"Evidence: {output}")
+
+
+def _default_output(prefix: str) -> Path:
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return Path("data/runs") / f"{prefix}-{timestamp}.json"
+
+
+def cmd_play(args):
+    """Run the fixed baseline with live frames and replay evidence."""
+    from src.gameplay import run_recorded_episode, scripted_provider
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    output = args.output or Path("data/runs") / f"baseline-{timestamp}"
+    provider = scripted_provider() if args.scripted else None
+    if args.scripted:
+        console.print(
+            "[yellow]OFFLINE SCRIPTED CHECK — this is not LLM gameplay[/yellow]"
+        )
+    if args.serve:
+        console.print(f"Viewer: http://127.0.0.1:{args.port}/")
+    trace, run_id, server = run_recorded_episode(
+        seed=args.seed,
+        max_steps=args.max_steps,
+        output=output,
+        provider=provider,
+        serve_port=args.port if args.serve else None,
+        pace_seconds=args.pace,
+        persist=not args.scripted,
+    )
+    console.print(
+        f"[green]Episode complete[/green]: {trace.termination_reason}, "
+        f"{trace.steps} steps, score={trace.score:.2f}"
+    )
+    console.print(f"Replay: {output / 'index.html'}")
+    if run_id:
+        console.print(f"Atlas run: {run_id}")
+    if trace.termination_reason == "agent_error":
+        sys.exit(2)
+    if server:
+        console.print("Press Ctrl-C to stop the viewer.")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            server.shutdown()
+            server.server_close()
+
+
+def cmd_compare(args):
+    """Evaluate a frozen baseline and champion on identical held-out seeds."""
+    from src.db import get_db, get_genome
+    from src.evaluator import compare_paired, evaluate_harness
+    from src.gameplay import baseline_genome
+
+    database = get_db()
+    champion = get_genome(database, args.champion_id)
+    if champion is None:
+        console.print(f"[red]Genome {args.champion_id} not found[/red]")
+        sys.exit(1)
+    baseline = (
+        get_genome(database, args.baseline_id)
+        if args.baseline_id
+        else baseline_genome()
+    )
+    if baseline is None:
+        console.print(f"[red]Genome {args.baseline_id} not found[/red]")
+        sys.exit(1)
+    seeds = args.seeds or list(range(200, 230))
+    baseline_result = evaluate_harness(baseline, seeds, max_steps=args.max_steps)
+    champion_result = evaluate_harness(champion, seeds, max_steps=args.max_steps)
+    comparison = compare_paired(baseline_result, champion_result)
+    output = args.output or _default_output(f"paired-{baseline.id}-vs-{champion.id}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(
+            {
+                "comparison": comparison.to_dict(),
+                "baseline": baseline_result.to_dict(),
+                "champion": champion_result.to_dict(),
+            },
+            indent=2,
+        )
+    )
+    console.print(
+        f"[green]Paired score delta: {comparison.score_delta:+.2f}[/green] "
+        f"over {comparison.sample_size} held-out seeds"
+    )
+    console.print(f"Evidence: {output}")
 
 
 def cmd_serve(args):
     """Start the API server."""
     import uvicorn
-    console.print(f"[bold green]Starting dashboard API on port {args.port}[/bold green]")
+
+    console.print(
+        f"[bold green]Starting dashboard API on port {args.port}[/bold green]"
+    )
     uvicorn.run("api:app", host="0.0.0.0", port=args.port, reload=True)
 
 
@@ -64,7 +170,9 @@ def cmd_seed_only(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Harness Darwinism — evolve LLM agent harnesses")
+    parser = argparse.ArgumentParser(
+        description="Harness Darwinism — evolve LLM agent harnesses"
+    )
     sub = parser.add_subparsers(dest="command")
 
     p_evolve = sub.add_parser("evolve", help="Run the full evolution loop")
@@ -73,7 +181,32 @@ def main():
 
     p_eval = sub.add_parser("eval", help="Evaluate a genome on held-out seeds")
     p_eval.add_argument("genome_id", help="ID of the genome to evaluate")
+    p_eval.add_argument("--seeds", type=int, nargs="+")
+    p_eval.add_argument("--max-steps", type=int, default=200)
+    p_eval.add_argument("--output", type=Path)
     p_eval.set_defaults(func=cmd_eval_held_out)
+
+    p_play = sub.add_parser("play", help="Run and record the fixed baseline harness")
+    p_play.add_argument("--seed", type=int, default=42)
+    p_play.add_argument("--max-steps", type=int, default=200)
+    p_play.add_argument("--output", type=Path)
+    p_play.add_argument(
+        "--scripted", action="store_true", help="Use labeled offline actions"
+    )
+    p_play.add_argument("--serve", action="store_true", help="Serve the live viewer")
+    p_play.add_argument("--port", type=int, default=8765)
+    p_play.add_argument("--pace", type=float, default=0.0)
+    p_play.set_defaults(func=cmd_play)
+
+    p_compare = sub.add_parser(
+        "compare", help="Compare baseline and champion on paired held-out seeds"
+    )
+    p_compare.add_argument("champion_id")
+    p_compare.add_argument("--baseline-id")
+    p_compare.add_argument("--seeds", type=int, nargs="+")
+    p_compare.add_argument("--max-steps", type=int, default=200)
+    p_compare.add_argument("--output", type=Path)
+    p_compare.set_defaults(func=cmd_compare)
 
     p_serve = sub.add_parser("serve", help="Start the dashboard API")
     p_serve.add_argument("-p", "--port", type=int, default=8001)
