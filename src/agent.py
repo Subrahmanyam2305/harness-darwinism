@@ -5,11 +5,19 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+
+import imageio.v3 as iio
+import numpy as np
+from PIL import Image
 
 from src.config import settings
 from src.crafter_env import ACTIONS, CrafterTextEnv
 from src.genome import Genome
 from src.llm import chat
+
+REPLAY_DIR = settings.project_root / "data" / "replays"
+REPLAY_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -22,6 +30,7 @@ class EpisodeTrace:
     steps: int
     history: list[dict] = field(default_factory=list)
     failure_summary: str = ""
+    gif_path: str = ""
 
 
 def _build_system_prompt(genome: Genome) -> str:
@@ -46,40 +55,69 @@ def _build_system_prompt(genome: Genome) -> str:
     return "\n".join(parts)
 
 
-def _parse_action(response: str) -> str:
-    """Extract action from LLM response, with fallback."""
+def _parse_action(response: str, allowed_actions: list[str] | None = None) -> str:
+    """Extract action from LLM response, validating against allowed actions."""
+    valid = set(allowed_actions) if allowed_actions else set(ACTIONS)
     try:
         match = re.search(r'\{[^}]+\}', response)
         if match:
             data = json.loads(match.group())
             action = data.get("action", "noop")
-            if action in ACTIONS:
+            if action in valid:
                 return action
     except (json.JSONDecodeError, KeyError):
         pass
 
     for action in ACTIONS:
-        if action in response.lower():
+        if action in response.lower() and action in valid:
             return action
     return "noop"
+
+
+def _extract_thought(response: str) -> str:
+    """Extract the thought field from LLM JSON response."""
+    try:
+        match = re.search(r'\{[^}]+\}', response)
+        if match:
+            data = json.loads(match.group())
+            return data.get("thought", "")
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return ""
 
 
 def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrace:
     """Run one Crafter episode with the given genome's harness."""
     env = CrafterTextEnv(seed=seed, max_steps=max_steps)
     system_prompt = _build_system_prompt(genome)
+    allowed_actions = genome.genome.tools
 
     messages: list[dict] = []
     history: list[dict] = []
     notes: list[str] = []
+    memory_type = genome.genome.memory_policy.type
 
     obs = env.reset()
+    prev_action = None
+    prev_reward = 0.0
 
     while True:
         user_parts = [f"Observation:\n{obs}"]
-        if notes:
+
+        # Memory: implement all three modes
+        if memory_type == "notes" and notes:
             max_notes = genome.genome.memory_policy.max_items
             user_parts.append("\nYour notes:\n" + "\n".join(f"- {n}" for n in notes[-max_notes:]))
+        elif memory_type == "summary" and notes:
+            max_notes = genome.genome.memory_policy.max_items
+            recent = notes[-max_notes:]
+            user_parts.append(f"\nMemory summary ({len(recent)} events): " + "; ".join(recent))
+        # memory_type == "none": no memory shown
+
+        if prev_action is not None:
+            outcome = f"reward +{prev_reward}" if prev_reward > 0 else "no reward"
+            user_parts.append(f"\nPrevious action: {prev_action} → {outcome}")
+
         user_parts.append(f"\nStep {env.step_count + 1}/{max_steps}. Choose your action.")
 
         user_msg = "\n".join(user_parts)
@@ -101,22 +139,28 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
             reply = '{"action": "noop"}'
             history.append({"step": env.step_count, "error": str(e)})
 
-        action = _parse_action(reply)
+        action = _parse_action(reply, allowed_actions)
 
         messages.append({"role": "user", "content": user_msg})
         messages.append({"role": "assistant", "content": reply})
 
         obs, reward, done, info = env.step(action)
 
+        # Structured trace entry
         history.append({
             "step": env.step_count,
             "action": action,
             "reward": reward,
-            "obs_snippet": obs[:200],
+            "obs_snippet": obs[:300],
+            "thought": _extract_thought(reply),
+            "prev_action": prev_action,
         })
 
+        prev_action = action
+        prev_reward = reward
+
         if reward > 0:
-            notes.append(f"Step {env.step_count}: got reward {reward} from {action}")
+            notes.append(f"Step {env.step_count}: reward +{reward} from {action}")
         if "health=1" in obs or "health=2" in obs:
             notes.append(f"Step {env.step_count}: critically low health!")
 
@@ -127,6 +171,18 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
     achievements = env.get_achievements()
     failure_summary = _summarize_failure(history, achievements, env.step_count, max_steps)
 
+    # Save GIF replay
+    gif_path = ""
+    if env.frames:
+        gif_name = f"{genome.id}_s{seed}.gif"
+        gif_full = REPLAY_DIR / gif_name
+        upscaled = [
+            np.array(Image.fromarray(f).resize((256, 256), Image.NEAREST))
+            for f in env.frames
+        ]
+        iio.imwrite(str(gif_full), upscaled, duration=200, loop=0)
+        gif_path = gif_name
+
     return EpisodeTrace(
         genome_id=genome.id,
         seed=seed,
@@ -135,6 +191,7 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
         steps=env.step_count,
         history=history,
         failure_summary=failure_summary,
+        gif_path=gif_path,
     )
 
 

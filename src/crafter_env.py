@@ -91,11 +91,20 @@ def _info_to_text(info: dict, step: int) -> str:
         else:
             lines.append("  Nothing notable nearby, just grass.")
 
-    # Time
-    if hasattr(info, "get"):
-        sleeping = info.get("sleeping", False)
+    # Time of day
+    sleeping = info.get("sleeping", False)
+    if sleeping:
+        lines.append("\n## Status: SLEEPING")
+
+    # Light level / day-night
+    light = info.get("light_level", None)
+    if light is not None:
+        phase = "DAY" if light > 0 else "NIGHT"
+        lines.append(f"\n## Time: {phase}")
+    elif hasattr(info, "get"):
+        # Fallback
         if sleeping:
-            lines.append("\n## Status: SLEEPING")
+            pass  # already shown
 
     # Achievements so far
     unlocked = info.get("achievements", {})
@@ -108,16 +117,24 @@ def _info_to_text(info: dict, step: int) -> str:
 
 
 def _direction(dy: int, dx: int) -> str:
+    """Convert (row_delta, col_delta) to cardinal direction.
+    
+    Crafter coordinate system:
+      - row increases → move_right (east on screen)
+      - col increases → move_down (south on screen)
+      - move_up decreases col, move_left decreases row
+    So: dy (row delta) = east/west, dx (col delta) = north/south.
+    """
     if dy == 0 and dx == 0:
         return "here"
     parts = []
-    if dy < 0:
-        parts.append("north")
-    elif dy > 0:
-        parts.append("south")
     if dx < 0:
-        parts.append("west")
+        parts.append("north")
     elif dx > 0:
+        parts.append("south")
+    if dy < 0:
+        parts.append("west")
+    elif dy > 0:
         parts.append("east")
     return "-".join(parts)
 
@@ -131,12 +148,14 @@ class CrafterTextEnv:
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements: dict[str, bool] = {a: False for a in ALL_ACHIEVEMENTS}
+        self._frames: list[np.ndarray] = []
 
     def reset(self) -> str:
-        self.env.reset()
+        obs = self.env.reset()
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements = {a: False for a in ALL_ACHIEVEMENTS}
+        self._frames = [obs.copy()]
         # Do a noop step to get info
         _, _, _, info = self.env.step(0)
         self._step_count = 0  # don't count the noop
@@ -147,6 +166,7 @@ class CrafterTextEnv:
         obs, reward, done, info = self.env.step(idx)
         self._step_count += 1
         self._total_reward += reward
+        self._frames.append(obs.copy())
 
         for ach in ALL_ACHIEVEMENTS:
             if info.get("achievements", {}).get(ach, False):
@@ -158,13 +178,14 @@ class CrafterTextEnv:
         text_obs = _info_to_text(info, self._step_count)
         return text_obs, reward, done, info
 
+    @property
+    def frames(self) -> list[np.ndarray]:
+        return self._frames
+
     def get_score(self) -> float:
-        """Crafter score: geometric mean of (success_rate + 1%) across achievements."""
-        rates = []
-        for ach in ALL_ACHIEVEMENTS:
-            rates.append(1.0 if self._achievements.get(ach) else 0.0)
-        clipped = [max(r, 0.01) for r in rates]
-        return float(np.exp(np.mean(np.log(clipped)))) * 100
+        """Per-episode score (not the aggregate Crafter score — see crafter_score())."""
+        unlocked = sum(1 for v in self._achievements.values() if v)
+        return float(unlocked)
 
     def get_achievements(self) -> dict[str, bool]:
         return dict(self._achievements)
@@ -172,3 +193,16 @@ class CrafterTextEnv:
     @property
     def step_count(self) -> int:
         return self._step_count
+
+
+def crafter_score(achievement_rates: dict[str, float]) -> float:
+    """Upstream Crafter aggregate score: exp(mean(log(1 + 100*rate))) - 1.
+    
+    See: https://github.com/danijar/crafter/blob/main/analysis/common.py
+    achievement_rates: {achievement_name: success_rate} where rate is 0.0-1.0
+    """
+    rates = []
+    for ach in ALL_ACHIEVEMENTS:
+        rate = achievement_rates.get(ach, 0.0)
+        rates.append(np.log(1 + 100 * rate))
+    return float(np.exp(np.mean(rates)) - 1)

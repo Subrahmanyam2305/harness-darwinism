@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 
 from src.db import get_all_genomes, get_db, get_metrics, get_runs_for_genome
+
+REPLAY_DIR = Path(__file__).resolve().parent / "data" / "replays"
+REPLAY_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Harness Darwinism", version="0.1.0")
 
@@ -15,6 +22,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Extract individual frame from GIF for synchronized replay
+@app.get("/api/frame/{gif_name}/{frame_idx}")
+def get_frame(gif_name: str, frame_idx: int):
+    """Return a single PNG frame from a GIF replay."""
+    gif_path = REPLAY_DIR / gif_name
+    if not gif_path.exists():
+        return Response(status_code=404)
+    try:
+        from PIL import Image
+        import io
+        with Image.open(str(gif_path)) as img:
+            img.seek(min(frame_idx, img.n_frames - 1))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return Response(content=buf.getvalue(), media_type="image/png")
+    except Exception:
+        return Response(status_code=404)
+
+
+# Serve GIF replays as static files
+app.mount("/replays", StaticFiles(directory=str(REPLAY_DIR)), name="replays")
 
 
 @app.get("/api/health")
@@ -61,6 +90,13 @@ def genome_detail(genome_id: str):
         r.pop("_id", None)
         if "timestamp" in r:
             r["timestamp"] = _safe_timestamp(r["timestamp"])
+        # Keep history compact for replay — only obs_snippet, action, reward
+        if "history" in r and isinstance(r["history"], list):
+            r["history"] = [
+                {"step": h.get("step"), "action": h.get("action"), "reward": h.get("reward"),
+                 "obs_snippet": h.get("obs_snippet", ""), "thought": h.get("thought", "")}
+                for h in r["history"]
+            ]
     return {"genome": g.model_dump(), "runs": runs}
 
 

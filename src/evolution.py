@@ -12,6 +12,7 @@ from rich.table import Table
 
 from src.agent import EpisodeTrace, play_episode
 from src.config import settings
+from src.crafter_env import crafter_score
 from src.db import (
     ensure_indexes,
     get_archive,
@@ -87,8 +88,11 @@ def evaluate_genome(genome: Genome, seeds: list[int]) -> tuple[Fitness, list[Epi
 
     achievement_rates = {k: float(np.mean(v)) for k, v in all_achievements.items()}
 
+    # Use upstream Crafter scoring: exp(mean(log(1 + 100*rate))) - 1
+    aggregate_score = crafter_score(achievement_rates)
+
     fitness = Fitness(
-        score=float(np.mean(scores)),
+        score=aggregate_score,
         achievements=achievement_rates,
         mean_steps=total_steps / len(seeds),
     )
@@ -170,7 +174,9 @@ def run_generation(
                 "achievements": trace.achievements,
                 "steps": trace.steps,
                 "failure_summary": trace.failure_summary,
+                "history": trace.history,
                 "history_len": len(trace.history),
+                "gif_path": trace.gif_path,
                 "arm": genome.arm,
                 "timestamp": datetime.now(timezone.utc),
             })
@@ -235,15 +241,23 @@ def run_generation(
         console.print(f"→ {child.id}: {mutation_note}")
         child_idx += 1
 
-    # Promote survivors to next generation
-    next_population = []
-    for i, g in enumerate(survivors):
-        g.generation = gen + 1
-        g.id = make_id(gen + 1, n_children + i)
-        upsert_genome(db, g)
-        next_population.append(g)
-
-    next_population = children + next_population
+    # Promote survivors to next generation — preserve original identity
+    # Survivors carry forward as-is; their original id/generation stays intact
+    # so lineage is traceable. Create lightweight references for the next round.
+    next_population = list(children)
+    for g in survivors:
+        # Clone survivor with new generation ID but keep parents pointing to original
+        promoted = Genome(
+            id=make_id(gen + 1, n_children + survivors.index(g)),
+            generation=gen + 1,
+            parents=[g.id],
+            genome=g.genome.model_copy(),
+            fitness=g.fitness.model_copy(),
+            mutation_note=f"Carried forward from {g.id}",
+            arm=g.arm,
+        )
+        upsert_genome(db, promoted)
+        next_population.append(promoted)
 
     # 4. Record metrics
     scores = [g.fitness.score for g in population]
