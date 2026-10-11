@@ -77,8 +77,10 @@ def _build_system_prompt(genome: Genome) -> str:
         "Moving changes the direction you face. The 'do' action interacts with the adjacent tile.",
         "Use 'do' while facing a tree to collect wood. A table costs 2 wood.",
         "A wood pickaxe costs 1 wood and must be crafted near a table.",
-        "If a target is at distance 1, first choose move_<direction> to face it even if "
-        "the tile is blocked, then choose do on the next turn.",
+        (
+            "If a target is at distance 1, first choose move_<direction> to face it even if "
+            "the tile is blocked, then choose do on the next turn."
+        ),
         "Navigate to the nearest target by reducing one reported direction and distance at a time.",
         "Each response executes exactly one game action.",
     ]

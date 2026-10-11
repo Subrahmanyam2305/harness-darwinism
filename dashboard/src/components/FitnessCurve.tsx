@@ -1,12 +1,12 @@
+import { motion } from "framer-motion";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
+  Area,
+  AreaChart,
 } from "recharts";
 import type { MetricPoint } from "../api";
 
@@ -18,48 +18,79 @@ export function FitnessCurve({ data }: Props) {
   if (!data.length) {
     return (
       <div className="panel empty">
-        <p>No evolution data yet. Run <code>python run.py evolve</code> to start.</p>
+        <p>
+          Waiting for first generation…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="panel">
-      <h2>📈 Fitness Curve</h2>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+    <motion.div
+      className="panel"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+    >
+      <h2>Fitness Curve</h2>
+      <ResponsiveContainer width="100%" height={280}>
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id="bestGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#30d158" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#30d158" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="meanGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#0a84ff" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#0a84ff" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(255,255,255,0.04)"
+          />
           <XAxis
             dataKey="generation"
-            label={{ value: "Generation", position: "insideBottom", offset: -5 }}
-            stroke="#888"
+            stroke="rgba(235,235,245,0.3)"
+            tick={{ fontSize: 11, fill: "rgba(235,235,245,0.4)" }}
+            axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
           />
           <YAxis
-            label={{ value: "Score", angle: -90, position: "insideLeft" }}
-            stroke="#888"
+            stroke="rgba(235,235,245,0.3)"
+            tick={{ fontSize: 11, fill: "rgba(235,235,245,0.4)" }}
+            axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
           />
           <Tooltip
-            contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #444" }}
+            contentStyle={{
+              background: "rgba(28,28,30,0.9)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              fontSize: 12,
+              color: "#f5f5f7",
+            }}
           />
-          <Legend />
-          <Line
+          <Area
             type="monotone"
             dataKey="best_score"
-            stroke="#00d4aa"
+            stroke="#30d158"
             strokeWidth={2}
+            fill="url(#bestGrad)"
             name="Best"
-            dot={{ r: 4 }}
+            dot={{ r: 4, fill: "#30d158", strokeWidth: 0 }}
+            activeDot={{ r: 6, fill: "#30d158" }}
           />
-          <Line
+          <Area
             type="monotone"
             dataKey="mean_score"
-            stroke="#6366f1"
-            strokeWidth={2}
+            stroke="#0a84ff"
+            strokeWidth={1.5}
+            fill="url(#meanGrad)"
             name="Mean"
-            dot={{ r: 4 }}
+            dot={{ r: 3, fill: "#0a84ff", strokeWidth: 0 }}
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
-    </div>
+    </motion.div>
   );
 }

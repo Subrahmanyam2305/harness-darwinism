@@ -9,9 +9,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from src.agent import EpisodeFrame, EpisodeTrace, play_episode
-from src.db import get_db, get_run, insert_episode
+from src.db import get_db, get_run, insert_episode, upsert_genome
 from src.gameplay_provider import BedrockProvider, GameplayProvider, ScriptedProvider
-from src.genome import Genome, GenomeConfig
+from src.genome import Fitness, Genome, GenomeConfig
 from src.recording import EpisodeRecorder
 
 
@@ -62,8 +62,9 @@ def run_recorded_episode(
             time.sleep(pace_seconds)
 
     try:
+        genome = baseline_genome()
         trace = play_episode(
-            baseline_genome(),
+            genome,
             seed,
             max_steps=max_steps,
             provider=provider,
@@ -77,6 +78,16 @@ def run_recorded_episode(
                 raise RuntimeError(
                     "Atlas is required to persist live gameplay evidence"
                 )
+            genome.fitness = Fitness(
+                score=trace.score,
+                achievements={
+                    name: 1.0 if unlocked else 0.0
+                    for name, unlocked in trace.achievements.items()
+                },
+                mean_steps=float(trace.steps),
+                cost_usd=trace.cost_usd or 0.0,
+            )
+            upsert_genome(database, genome)
             run_id = insert_episode(database, trace, artifact_path=str(output))
             if get_run(database, run_id) is None:
                 raise RuntimeError(f"Atlas could not read back persisted run {run_id}")

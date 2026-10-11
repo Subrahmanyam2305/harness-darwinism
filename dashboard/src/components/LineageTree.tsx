@@ -95,7 +95,6 @@ export function LineageTree({ data, onSelectGenome }: Props) {
           edges={edges}
           onNodeClick={onNodeClick}
           fitView
-          proOptions={{ hideAttribution: true }}
         >
           <Background color="#333" gap={20} />
           <Controls />
