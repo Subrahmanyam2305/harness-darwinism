@@ -196,6 +196,8 @@ def lineage_tree(arm: str = "full"):
                 "status": g.status,
                 "score": g.fitness.score,
                 "rules_count": len(g.genome.rules),
+                "selection_note": g.selection_note,
+                "crossover_note": g.crossover_note,
                 "mutation_note": g.mutation_note,
             }
         )

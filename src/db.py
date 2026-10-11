@@ -263,7 +263,9 @@ def record_metrics(
         "timestamp": datetime.now(UTC).isoformat(),
     }
     if db is not None:
-        db["metrics"].insert_one(doc)
+        db["metrics"].replace_one(
+            {"generation": gen, "arm": arm}, doc, upsert=True
+        )
     else:
         _save_doc("metrics", f"gen_{gen}_{arm}", doc)
 

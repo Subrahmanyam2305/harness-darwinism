@@ -27,6 +27,9 @@ export interface GenomeSummary {
     memory_policy: { type: string; max_items: number };
     context_budget: { history_steps: number };
   };
+  selection_note: string;
+  crossover_note: string;
+  crossover_config: GenomeSummary["genome"] | null;
   mutation_note: string;
   arm: string;
 }
@@ -38,6 +41,8 @@ export interface TreeData {
     status: string;
     score: number;
     rules_count: number;
+    selection_note: string;
+    crossover_note: string;
     mutation_note: string;
   }[];
   edges: { source: string; target: string }[];

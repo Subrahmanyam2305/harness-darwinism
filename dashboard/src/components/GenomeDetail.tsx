@@ -28,6 +28,29 @@ export function GenomeDetail({ genome, onClose }: Props) {
         )}
       </div>
 
+      {genome.selection_note && (
+        <div className="mutation-note">
+          <strong>Selection:</strong> {genome.selection_note}
+        </div>
+      )}
+
+      {genome.crossover_note && (
+        <div className="mutation-note">
+          <strong>Crossover:</strong> {genome.crossover_note}
+        </div>
+      )}
+
+      {genome.crossover_config && (
+        <>
+          <h3>Crossover Output</h3>
+          <ol className="rules-list">
+            {genome.crossover_config.rules.map((rule, index) => (
+              <li key={index}>{rule}</li>
+            ))}
+          </ol>
+        </>
+      )}
+
       {genome.mutation_note && (
         <div className="mutation-note">
           <strong>Mutation:</strong> {genome.mutation_note}

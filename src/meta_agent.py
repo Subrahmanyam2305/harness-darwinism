@@ -10,8 +10,10 @@ from src.genome import GenomeConfig
 from src.llm import chat
 
 
-def llm_crossover(parent_a: GenomeConfig, parent_b: GenomeConfig) -> GenomeConfig:
-    """Merge two parent genomes into a child genome using an LLM."""
+def llm_crossover(
+    parent_a: GenomeConfig, parent_b: GenomeConfig
+) -> tuple[GenomeConfig, str]:
+    """Merge two parent genomes and return the LLM's crossover explanation."""
     prompt = f"""You are an evolution operator. Merge the best traits of two parent agent configurations into one child.
 
 ## Parent A
@@ -35,10 +37,13 @@ Produce a CHILD configuration that combines the strongest elements of both paren
 
 Respond with ONLY a JSON object:
 {{
-  "system_prompt": "...",
-  "rules": ["...", "..."],
-  "memory_policy": {{"type": "notes"|"summary"|"none", "max_items": N}},
-  "context_budget": {{"history_steps": N}}
+  "config": {{
+    "system_prompt": "...",
+    "rules": ["...", "..."],
+    "memory_policy": {{"type": "notes"|"summary"|"none", "max_items": N}},
+    "context_budget": {{"history_steps": N}}
+  }},
+  "crossover_note": "one sentence explaining which traits you kept from each parent and why"
 }}"""
 
     resp = chat(
@@ -47,7 +52,16 @@ Respond with ONLY a JSON object:
         max_tokens=600,
         temperature=0.7,
     )
-    return _parse_genome_config(resp)
+    try:
+        match = re.search(r"\{[\s\S]+\}", resp)
+        if match:
+            data = json.loads(match.group())
+            config = GenomeConfig(**data.get("config", data))
+            note = data.get("crossover_note", "Combined both parent configurations")
+            return config, note
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        pass
+    return parent_a.model_copy(deep=True), "Crossover failed; retained parent A"
 
 
 def llm_mutate(
@@ -108,19 +122,7 @@ Respond with ONLY a JSON object:
             config = GenomeConfig(**data.get("config", data))
             note = data.get("mutation_note", "LLM mutation")
             return config, note
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         pass
 
     return genome, "mutation failed — kept parent"
-
-
-def _parse_genome_config(raw: str) -> GenomeConfig:
-    """Parse LLM output into a GenomeConfig, with fallback."""
-    try:
-        match = re.search(r"\{[\s\S]+\}", raw)
-        if match:
-            data = json.loads(match.group())
-            return GenomeConfig(**data)
-    except (json.JSONDecodeError, KeyError, TypeError):
-        pass
-    return GenomeConfig()

@@ -70,6 +70,9 @@ class Genome(BaseModel):
     status: Literal["alive", "archived", "champion"] = "alive"
     genome: GenomeConfig = Field(default_factory=GenomeConfig)
     fitness: Fitness = Field(default_factory=Fitness)
+    selection_note: str = ""
+    crossover_note: str = ""
+    crossover_config: GenomeConfig | None = None
     mutation_note: str = ""
     arm: str = "full"  # ablation arm label
 

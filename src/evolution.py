@@ -271,7 +271,10 @@ def run_generation(
     for child_idx, (parent_a, parent_b) in enumerate(pairs):
         console.print(f"  Crossing {parent_a.id} × {parent_b.id}...", end=" ")
 
-        child_config = llm_crossover(parent_a.genome, parent_b.genome)
+        crossover_config, crossover_note = llm_crossover(
+            parent_a.genome, parent_b.genome
+        )
+        child_config = crossover_config.model_copy(deep=True)
 
         # Mutate based on failure traces
         traces_a = get_failure_traces(db, parent_a.id)
@@ -301,6 +304,13 @@ def run_generation(
             generation=gen + 1,
             parents=[parent_a.id, parent_b.id],
             genome=child_config,
+            selection_note=(
+                f"Fitness-weighted selection chose {parent_a.id} "
+                f"(score={parent_a.fitness.score:.3f}) and {parent_b.id} "
+                f"(score={parent_b.fitness.score:.3f})."
+            ),
+            crossover_note=crossover_note,
+            crossover_config=crossover_config,
             mutation_note=mutation_note,
             arm=parent_a.arm,
         )
@@ -319,6 +329,10 @@ def run_generation(
             parents=[survivor.id],
             genome=survivor.genome.model_copy(deep=True),
             fitness=survivor.fitness.model_copy(deep=True),
+            selection_note=(
+                f"Carried forward as a top-{survivor_count} survivor with "
+                f"score={survivor.fitness.score:.3f}."
+            ),
             mutation_note=f"Carried forward from {survivor.id}",
             arm=survivor.arm,
         )
@@ -383,7 +397,7 @@ def run_evolution(
     max_steps: int | None = None,
     resume: bool = False,
 ) -> Genome:
-    """Run evolutionary transitions, evaluate the final generation, and return its champion."""
+    """Run new or resumed evolutionary transitions and return the latest champion."""
     db = get_db()
     if db is None:
         raise RuntimeError("Atlas is required for evolution runs")
@@ -422,22 +436,23 @@ def run_evolution(
     if resume:
         if not existing_genomes:
             raise ValueError(f"Experiment {experiment_id!r} does not exist")
-        generations = {genome.generation for genome in existing_genomes}
-        if generations != {0}:
-            raise ValueError(
-                "Resume currently requires an interrupted generation 0 experiment"
-            )
-        population = [genome for genome in existing_genomes if genome.status == "alive"]
+        start_generation = max(genome.generation for genome in existing_genomes)
+        population = [
+            genome
+            for genome in existing_genomes
+            if genome.generation == start_generation
+        ]
         if len(population) != target_size:
             raise ValueError(
-                f"Stored generation 0 has {len(population)} live genomes, "
+                f"Stored generation {start_generation} has {len(population)} genomes, "
                 f"expected {target_size}"
             )
         stored_seeds = {
             run.get("seed")
             for genome in population
             for run in get_runs_for_genome(db, genome.id)
-            if run.get("generation") == 0 and run.get("seed") is not None
+            if run.get("generation") == start_generation
+            and run.get("seed") is not None
         }
         if len(stored_seeds) != seed_count:
             raise ValueError(
@@ -446,17 +461,21 @@ def run_evolution(
             )
         shared_seeds = sorted(stored_seeds)
     else:
+        start_generation = 0
         shared_seeds = random.sample(all_train_seeds, seed_count)
         population = seed_population(target_size, experiment_id=experiment_id)
         for g in population:
             upsert_genome(db, g)
 
     console.print(
-        f"[bold green]Starting evolution: {max_gen} transitions, pop={target_size}, "
+        f"[bold green]Starting evolution at generation {start_generation}: "
+        f"{max_gen} additional transition(s), pop={target_size}, "
         f"seeds={shared_seeds}, steps={step_limit}[/bold green]\n"
     )
 
-    for gen in range(max_gen):
+    for offset, gen in enumerate(
+        range(start_generation, start_generation + max_gen)
+    ):
         population = run_generation(
             gen,
             population,
@@ -465,11 +484,11 @@ def run_evolution(
             population_size=target_size,
             n_survivors=survivor_count,
             max_steps=step_limit,
-            reuse_completed=resume and gen == 0,
+            reuse_completed=resume and offset == 0,
         )
 
     # Evaluate offspring before crowning a champion.
-    final_generation = max_gen
+    final_generation = start_generation + max_gen
     for genome in population:
         fitness, traces = evaluate_genome(genome, shared_seeds, max_steps=step_limit)
         genome.fitness = fitness

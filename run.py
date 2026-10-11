@@ -182,7 +182,13 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     p_evolve = sub.add_parser("evolve", help="Run the full evolution loop")
-    p_evolve.add_argument("-g", "--generations", type=int, default=5)
+    p_evolve.add_argument(
+        "-g",
+        "--generations",
+        type=int,
+        default=5,
+        help="Evolutionary transitions to run (additional transitions with --resume)",
+    )
     p_evolve.add_argument("--experiment-id", required=True)
     p_evolve.add_argument("--population", type=int, default=4)
     p_evolve.add_argument("--survivors", type=int, default=2)
@@ -191,7 +197,7 @@ def main():
     p_evolve.add_argument(
         "--resume",
         action="store_true",
-        help="Resume an interrupted generation 0 experiment from Atlas evidence",
+        help="Continue the latest stored generation using Atlas evidence",
     )
     p_evolve.set_defaults(func=cmd_evolve)
 

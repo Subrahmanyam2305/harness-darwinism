@@ -60,8 +60,9 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
     monkeypatch.setattr("src.evolution.evaluate_genome", fake_evaluate)
     monkeypatch.setattr(
         "src.evolution.llm_crossover",
-        lambda parent_a, parent_b: GenomeConfig(
-            rules=[*parent_a.rules, *parent_b.rules][:8]
+        lambda parent_a, parent_b: (
+            GenomeConfig(rules=[*parent_a.rules, *parent_b.rules][:8]),
+            "Kept the strongest rules from both parents",
         ),
     )
     monkeypatch.setattr("src.evolution.llm_mutate", fake_mutate)
@@ -96,6 +97,10 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
     assert [genome.id for genome in population] == original_ids
     assert all(genome.generation == 1 for genome in next_population)
     assert all(genome.parents for genome in next_population)
+    children = [genome for genome in next_population if len(genome.parents) == 2]
+    assert all(genome.selection_note for genome in children)
+    assert all(genome.crossover_note for genome in children)
+    assert all(genome.crossover_config is not None for genome in children)
     assert mutation_calls == 3  # first duplicate plus one unique mutation per child
     assert len(ledger_hashes) == 2
     assert all(genome.status == "archived" for genome in population)
