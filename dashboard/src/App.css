@@ -1,0 +1,294 @@
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --border: #2a2a40;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --accent: #6366f1;
+  --green: #00d4aa;
+  --red: #ef4444;
+  --yellow: #eab308;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+}
+
+.app {
+  min-height: 100vh;
+}
+
+/* Header */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  font-size: 28px;
+}
+
+.logo h1 {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.refresh-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity 0.2s;
+}
+
+.refresh-btn:hover {
+  opacity: 0.85;
+}
+
+/* Main layout */
+main {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* Panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.panel h2 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.panel.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-dim);
+}
+
+.panel.empty code {
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* Achievement grid */
+.ach-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.ach-comparison h3 {
+  font-size: 14px;
+  margin-bottom: 12px;
+  color: var(--text-dim);
+}
+
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.ach-cell {
+  padding: 8px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+}
+
+.ach-label {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.ach-pct {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Genome detail */
+.genome-detail {
+  border-color: var(--accent);
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-header button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.detail-meta {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.alive { background: var(--accent); color: white; }
+.status-badge.archived { background: #333; color: #888; }
+.status-badge.champion { background: var(--green); color: #000; }
+
+.mutation-note {
+  background: var(--bg);
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin: 12px 0;
+  font-size: 13px;
+  border-left: 3px solid var(--yellow);
+}
+
+.rules-list {
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.rules-list li::marker {
+  color: var(--accent);
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+/* Champion banner */
+.champion-banner {
+  border-color: var(--green);
+  background: linear-gradient(135deg, var(--surface), #0a2a20);
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+  color: var(--text-dim);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .ach-comparison {
+    grid-template-columns: 1fr;
+  }
+}
