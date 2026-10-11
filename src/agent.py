@@ -5,11 +5,19 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+
+import imageio.v3 as iio
+import numpy as np
+from PIL import Image
 
 from src.config import settings
 from src.crafter_env import ACTIONS, CrafterTextEnv
 from src.genome import Genome
 from src.llm import chat
+
+REPLAY_DIR = settings.project_root / "data" / "replays"
+REPLAY_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -22,6 +30,7 @@ class EpisodeTrace:
     steps: int
     history: list[dict] = field(default_factory=list)
     failure_summary: str = ""
+    gif_path: str = ""
 
 
 def _build_system_prompt(genome: Genome) -> str:
@@ -127,6 +136,18 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
     achievements = env.get_achievements()
     failure_summary = _summarize_failure(history, achievements, env.step_count, max_steps)
 
+    # Save GIF replay
+    gif_path = ""
+    if env.frames:
+        gif_name = f"{genome.id}_s{seed}.gif"
+        gif_full = REPLAY_DIR / gif_name
+        upscaled = [
+            np.array(Image.fromarray(f).resize((256, 256), Image.NEAREST))
+            for f in env.frames
+        ]
+        iio.imwrite(str(gif_full), upscaled, duration=200, loop=0)
+        gif_path = gif_name
+
     return EpisodeTrace(
         genome_id=genome.id,
         seed=seed,
@@ -135,6 +156,7 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
         steps=env.step_count,
         history=history,
         failure_summary=failure_summary,
+        gif_path=gif_path,
     )
 
 

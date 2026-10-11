@@ -172,6 +172,7 @@ def run_generation(
                 "failure_summary": trace.failure_summary,
                 "history": trace.history,
                 "history_len": len(trace.history),
+                "gif_path": trace.gif_path,
                 "arm": genome.arm,
                 "timestamp": datetime.now(timezone.utc),
             })

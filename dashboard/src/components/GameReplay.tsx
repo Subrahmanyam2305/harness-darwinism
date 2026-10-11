@@ -15,12 +15,16 @@ interface Run {
   steps: number;
   failure_summary: string;
   history_len: number;
+  gif_path?: string;
+  history?: Step[];
 }
 
 interface Props {
   runs: Run[];
   genomeId: string;
 }
+
+const API_BASE = "http://localhost:8001";
 
 export function GameReplay({ runs, genomeId }: Props) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(
@@ -33,15 +37,15 @@ export function GameReplay({ runs, genomeId }: Props) {
 
   useEffect(() => {
     if (!selectedRun) return;
-    // Fetch full run detail with history
-    fetch(
-      `http://localhost:8001/api/genomes/${selectedRun.genome_id}`
-    )
+    if (selectedRun.history && selectedRun.history.length > 0) {
+      setSteps(selectedRun.history);
+      setCurrentStep(0);
+      return;
+    }
+    fetch(`${API_BASE}/api/genomes/${selectedRun.genome_id}`)
       .then((r) => r.json())
       .then((data) => {
-        const run = data.runs?.find(
-          (r: any) => r.seed === selectedRun.seed
-        );
+        const run = data.runs?.find((r: any) => r.seed === selectedRun.seed);
         if (run?.history) {
           setSteps(run.history);
           setCurrentStep(0);
@@ -50,13 +54,8 @@ export function GameReplay({ runs, genomeId }: Props) {
       .catch(() => {});
   }, [selectedRun]);
 
-  const play = useCallback(() => {
-    setPlaying(true);
-  }, []);
-
-  const pause = useCallback(() => {
-    setPlaying(false);
-  }, []);
+  const play = useCallback(() => setPlaying(true), []);
+  const pause = useCallback(() => setPlaying(false), []);
 
   useEffect(() => {
     if (playing && steps.length > 0) {
@@ -68,7 +67,7 @@ export function GameReplay({ runs, genomeId }: Props) {
           }
           return prev + 1;
         });
-      }, 600);
+      }, 500);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -77,13 +76,11 @@ export function GameReplay({ runs, genomeId }: Props) {
 
   const step = steps[currentStep];
 
-  if (!runs.length) {
-    return (
-      <div className="panel empty">
-        <p>No runs to replay.</p>
-      </div>
-    );
-  }
+  if (!runs.length) return null;
+
+  const gifUrl = selectedRun?.gif_path
+    ? `${API_BASE}/replays/${selectedRun.gif_path}`
+    : null;
 
   return (
     <div className="panel replay-panel">
@@ -98,7 +95,7 @@ export function GameReplay({ runs, genomeId }: Props) {
                 setSelectedRun(run);
                 setPlaying(false);
               }}
-              title={`Seed ${run.seed} — Score ${run.score.toFixed(1)}`}
+              title={`Seed ${run.seed} — Score ${run.score?.toFixed(1)}`}
             >
               🌱
             </button>
@@ -106,96 +103,103 @@ export function GameReplay({ runs, genomeId }: Props) {
         </div>
       </div>
 
-      {/* Timeline scrubber */}
-      <div className="replay-timeline">
-        {steps.map((s, i) => (
-          <div
-            key={i}
-            className={`replay-tick ${
-              i < currentStep ? "past" : ""
-            } ${i === currentStep ? "current" : ""} ${
-              s.reward > 0 ? "reward" : ""
-            }`}
-            onClick={() => {
-              setCurrentStep(i);
-              setPlaying(false);
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Controls */}
-      <div className="replay-controls" style={{ marginBottom: 16 }}>
-        <button
-          className="replay-btn"
-          onClick={() =>
-            setCurrentStep((p) => Math.max(0, p - 1))
-          }
-        >
-          ◀
-        </button>
-        <button
-          className="replay-btn active"
-          onClick={playing ? pause : play}
-        >
-          {playing ? "⏸" : "▶"}
-        </button>
-        <button
-          className="replay-btn"
-          onClick={() =>
-            setCurrentStep((p) => Math.min(steps.length - 1, p + 1))
-          }
-        >
-          ▶
-        </button>
-        <span className="replay-step-counter">
-          Step {currentStep + 1} / {steps.length}
-        </span>
-        {selectedRun && (
-          <span
-            style={{
-              fontSize: 12,
-              color: "var(--text-tertiary)",
-              marginLeft: "auto",
-            }}
-          >
-            Seed {selectedRun.seed} · Score{" "}
-            <strong style={{ color: "var(--green)" }}>
-              {selectedRun.score.toFixed(1)}
-            </strong>
-          </span>
-        )}
-      </div>
-
-      {/* Frame */}
-      <AnimatePresence mode="wait">
-        {step && (
+      {/* Video + Text side by side */}
+      <div style={{ display: "grid", gridTemplateColumns: gifUrl ? "256px 1fr" : "1fr", gap: 20 }}>
+        {/* GIF replay */}
+        {gifUrl && (
           <motion.div
-            key={currentStep}
-            className="replay-frame"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ type: "spring", bounce: 0, duration: 0.25 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+            style={{
+              borderRadius: "var(--radius-md)",
+              overflow: "hidden",
+              border: "1px solid var(--border)",
+              background: "#000",
+              alignSelf: "start",
+            }}
           >
-            <div className="replay-observation">{step.obs_snippet}</div>
-            <div className="replay-action">
-              <div className="replay-action-badge">
-                → {step.action}
-              </div>
-              <div
-                className={`replay-reward ${
-                  step.reward > 0 ? "positive" : ""
-                }`}
-              >
-                {step.reward > 0
-                  ? `🎉 Reward: +${step.reward}`
-                  : `Reward: ${step.reward}`}
-              </div>
+            <img
+              src={gifUrl}
+              alt={`Crafter replay: ${genomeId} seed ${selectedRun?.seed}`}
+              style={{ width: 256, height: 256, display: "block", imageRendering: "pixelated" }}
+            />
+            <div
+              style={{
+                padding: "8px 12px",
+                background: "rgba(0,0,0,0.6)",
+                fontSize: 11,
+                color: "var(--text-tertiary)",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <span>Seed {selectedRun?.seed}</span>
+              <span style={{ color: "var(--green)", fontWeight: 600 }}>
+                Score {selectedRun?.score?.toFixed(1)}
+              </span>
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+
+        {/* Step-by-step text replay */}
+        <div>
+          {/* Timeline */}
+          <div className="replay-timeline">
+            {steps.map((s, i) => (
+              <div
+                key={i}
+                className={`replay-tick ${i < currentStep ? "past" : ""} ${
+                  i === currentStep ? "current" : ""
+                } ${s.reward > 0 ? "reward" : ""}`}
+                onClick={() => {
+                  setCurrentStep(i);
+                  setPlaying(false);
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Controls */}
+          <div className="replay-controls" style={{ marginBottom: 14 }}>
+            <button className="replay-btn" onClick={() => setCurrentStep((p) => Math.max(0, p - 1))}>
+              ◀
+            </button>
+            <button className="replay-btn active" onClick={playing ? pause : play}>
+              {playing ? "⏸" : "▶"}
+            </button>
+            <button className="replay-btn" onClick={() => setCurrentStep((p) => Math.min(steps.length - 1, p + 1))}>
+              ▶
+            </button>
+            <span className="replay-step-counter">
+              Step {currentStep + 1} / {steps.length}
+            </span>
+          </div>
+
+          {/* Current frame */}
+          <AnimatePresence mode="wait">
+            {step && (
+              <motion.div
+                key={currentStep}
+                className="replay-frame"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.25 }}
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <div className="replay-observation">{step.obs_snippet}</div>
+                <div className="replay-action">
+                  <div className="replay-action-badge">→ {step.action}</div>
+                  <div className={`replay-reward ${step.reward > 0 ? "positive" : ""}`}>
+                    {step.reward > 0 ? `🎉 Reward: +${step.reward}` : `Reward: ${step.reward}`}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }

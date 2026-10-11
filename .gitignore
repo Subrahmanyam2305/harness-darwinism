@@ -9,3 +9,4 @@ dist/
 .pytest_cache/
 data/runs/
 .vscode/
+data/replays/*.gif

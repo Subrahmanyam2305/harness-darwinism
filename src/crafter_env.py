@@ -131,12 +131,14 @@ class CrafterTextEnv:
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements: dict[str, bool] = {a: False for a in ALL_ACHIEVEMENTS}
+        self._frames: list[np.ndarray] = []
 
     def reset(self) -> str:
-        self.env.reset()
+        obs = self.env.reset()
         self._step_count = 0
         self._total_reward = 0.0
         self._achievements = {a: False for a in ALL_ACHIEVEMENTS}
+        self._frames = [obs.copy()]
         # Do a noop step to get info
         _, _, _, info = self.env.step(0)
         self._step_count = 0  # don't count the noop
@@ -147,6 +149,7 @@ class CrafterTextEnv:
         obs, reward, done, info = self.env.step(idx)
         self._step_count += 1
         self._total_reward += reward
+        self._frames.append(obs.copy())
 
         for ach in ALL_ACHIEVEMENTS:
             if info.get("achievements", {}).get(ach, False):
@@ -157,6 +160,10 @@ class CrafterTextEnv:
 
         text_obs = _info_to_text(info, self._step_count)
         return text_obs, reward, done, info
+
+    @property
+    def frames(self) -> list[np.ndarray]:
+        return self._frames
 
     def get_score(self) -> float:
         """Crafter score: geometric mean of (success_rate + 1%) across achievements."""

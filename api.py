@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.db import get_all_genomes, get_db, get_metrics, get_runs_for_genome
+
+REPLAY_DIR = Path(__file__).resolve().parent / "data" / "replays"
+REPLAY_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Harness Darwinism", version="0.1.0")
 
@@ -15,6 +21,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve GIF replays as static files
+app.mount("/replays", StaticFiles(directory=str(REPLAY_DIR)), name="replays")
 
 
 @app.get("/api/health")
