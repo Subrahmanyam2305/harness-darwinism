@@ -1,25 +1,41 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEvolutionData } from "./hooks/useEvolutionData";
 import { FitnessCurve } from "./components/FitnessCurve";
 import { LineageTree } from "./components/LineageTree";
 import { AchievementGrid } from "./components/AchievementGrid";
 import { GenomeDetail } from "./components/GenomeDetail";
+import { GameReplay } from "./components/GameReplay";
+import { fetchGenomeDetail } from "./api";
 import type { GenomeSummary } from "./api";
 import "./App.css";
 
 function App() {
   const { metrics, tree, achievements, genomes, loading, refresh } =
-    useEvolutionData(5000);
+    useEvolutionData(4000);
   const [selected, setSelected] = useState<GenomeSummary | null>(null);
+  const [replayRuns, setReplayRuns] = useState<any[]>([]);
+  const [replayGenomeId, setReplayGenomeId] = useState<string>("");
 
-  const handleSelectGenome = (id: string) => {
+  const handleSelectGenome = async (id: string) => {
     const g = genomes.find((g) => g.id === id) ?? null;
     setSelected(g);
+    // Fetch runs for replay
+    try {
+      const detail = await fetchGenomeDetail(id);
+      setReplayRuns(detail.runs || []);
+      setReplayGenomeId(id);
+    } catch {
+      setReplayRuns([]);
+    }
   };
 
   const champion = genomes.find((g) => g.status === "champion");
-  const currentGen = metrics.length > 0 ? metrics[metrics.length - 1].generation : 0;
-  const bestScore = metrics.length > 0 ? metrics[metrics.length - 1].best_score : 0;
+  const aliveGenomes = genomes.filter((g) => g.status === "alive");
+  const currentGen =
+    metrics.length > 0 ? metrics[metrics.length - 1].generation : 0;
+  const bestScore =
+    metrics.length > 0 ? metrics[metrics.length - 1].best_score : 0;
 
   return (
     <div className="app">
@@ -31,15 +47,31 @@ function App() {
         <div className="header-stats">
           <div className="stat">
             <span className="stat-label">Generation</span>
-            <span className="stat-value">{currentGen}</span>
+            <motion.span
+              className="stat-value"
+              key={currentGen}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+            >
+              {currentGen}
+            </motion.span>
           </div>
           <div className="stat">
             <span className="stat-label">Best Score</span>
-            <span className="stat-value">{bestScore.toFixed(1)}</span>
+            <motion.span
+              className="stat-value"
+              key={bestScore.toFixed(1)}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+            >
+              {bestScore.toFixed(1)}
+            </motion.span>
           </div>
           <div className="stat">
             <span className="stat-label">Population</span>
-            <span className="stat-value">{genomes.filter(g => g.status === "alive").length}</span>
+            <span className="stat-value">{aliveGenomes.length}</span>
           </div>
           <button className="refresh-btn" onClick={refresh}>
             ↻ Refresh
@@ -50,7 +82,7 @@ function App() {
       {loading ? (
         <div className="loading">
           <div className="spinner" />
-          <p>Connecting to evolution server...</p>
+          <p>Connecting to evolution server…</p>
         </div>
       ) : (
         <main>
@@ -59,33 +91,76 @@ function App() {
             <LineageTree data={tree} onSelectGenome={handleSelectGenome} />
           </div>
 
+          {/* Game Replay — show when a genome is selected */}
+          <AnimatePresence>
+            {replayRuns.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              >
+                <GameReplay
+                  runs={replayRuns}
+                  genomeId={replayGenomeId}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AchievementGrid
             baseline={achievements.baseline}
             champion={achievements.champion}
           />
 
-          {selected && (
-            <GenomeDetail
-              genome={selected}
-              onClose={() => setSelected(null)}
-            />
-          )}
+          <AnimatePresence>
+            {selected && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              >
+                <GenomeDetail
+                  genome={selected}
+                  onClose={() => {
+                    setSelected(null);
+                    setReplayRuns([]);
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {champion && !selected && (
-            <div className="panel champion-banner">
+            <motion.div
+              className="panel champion-banner"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", bounce: 0.1, duration: 0.5 }}
+            >
               <h2>🏆 Champion: {champion.id}</h2>
-              <p>Score: {champion.fitness.score.toFixed(1)} | Rules: {champion.genome.rules.length}</p>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "var(--text-secondary)",
+                  marginBottom: 12,
+                }}
+              >
+                Score: {champion.fitness.score.toFixed(1)} · Rules:{" "}
+                {champion.genome.rules.length}
+              </p>
               <ol className="rules-list">
                 {champion.genome.rules.map((r, i) => (
                   <li key={i}>{r}</li>
                 ))}
               </ol>
               {champion.mutation_note && (
-                <p className="mutation-note">
+                <div className="mutation-note">
                   <strong>Last mutation:</strong> {champion.mutation_note}
-                </p>
+                </div>
               )}
-            </div>
+            </motion.div>
           )}
         </main>
       )}

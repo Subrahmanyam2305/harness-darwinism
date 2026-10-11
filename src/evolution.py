@@ -170,6 +170,7 @@ def run_generation(
                 "achievements": trace.achievements,
                 "steps": trace.steps,
                 "failure_summary": trace.failure_summary,
+                "history": trace.history,
                 "history_len": len(trace.history),
                 "arm": genome.arm,
                 "timestamp": datetime.now(timezone.utc),

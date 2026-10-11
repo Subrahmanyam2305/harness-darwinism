@@ -61,6 +61,12 @@ def genome_detail(genome_id: str):
         r.pop("_id", None)
         if "timestamp" in r:
             r["timestamp"] = _safe_timestamp(r["timestamp"])
+        # Keep history compact for replay — only obs_snippet, action, reward
+        if "history" in r and isinstance(r["history"], list):
+            r["history"] = [
+                {"step": h.get("step"), "action": h.get("action"), "reward": h.get("reward"), "obs_snippet": h.get("obs_snippet", "")}
+                for h in r["history"]
+            ]
     return {"genome": g.model_dump(), "runs": runs}
 
 
