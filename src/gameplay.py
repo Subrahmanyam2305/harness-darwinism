@@ -21,12 +21,16 @@ def baseline_genome() -> Genome:
         id="fixed-baseline",
         genome=GenomeConfig(
             rules=[
-                "Collect at least three wood before crafting.",
-                "Place a table once you have two wood, then collect one more wood.",
+                "Collect at least three wood before placing a table.",
                 (
-                    "Immediately choose make_wood_pickaxe while standing next to the table; "
-                    "do not use do to craft."
+                    "Once you have three wood, choose place_table exactly once; it consumes "
+                    "two wood and leaves the one wood needed for a pickaxe."
                 ),
+                (
+                    "On the very next turn after place_table succeeds, choose "
+                    "make_wood_pickaxe; do not move and do not use do to craft."
+                ),
+                "Never repeat the same two-move pattern more than twice; choose another route.",
                 "Use observed directions and current facing; avoid water, lava, and enemies.",
             ]
         ),
