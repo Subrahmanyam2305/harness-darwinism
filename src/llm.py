@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import os
 from typing import Any
 
 import boto3
@@ -13,13 +13,25 @@ _client: Any = None
 def _get_client():
     global _client
     if _client is None:
-        _client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        _client = boto3.client(
+            "bedrock-runtime",
+            region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+            aws_session_token=os.environ.get("AWS_SESSION_TOKEN"),
+        )
     return _client
+
+
+def reset_client():
+    """Force re-creation of the Bedrock client (e.g. after refreshing creds)."""
+    global _client
+    _client = None
 
 
 def chat(
     messages: list[dict],
-    model: str = "anthropic.claude-haiku-4-5-20251001-v1:0",
+    model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     max_tokens: int = 300,
     temperature: float = 0.3,
     system: str | None = None,
@@ -28,10 +40,10 @@ def chat(
 
     Args:
         messages: list of {"role": "user"|"assistant", "content": "..."}
-        model: Bedrock model ID
+        model: Bedrock model / inference-profile ID
         max_tokens: max response tokens
         temperature: sampling temperature
-        system: optional system prompt (sent separately from messages)
+        system: optional system prompt
 
     Returns:
         The assistant's text response.
@@ -40,16 +52,14 @@ def chat(
 
     converse_messages = []
     for m in messages:
-        role = m["role"]
-        if role == "system":
+        if m["role"] == "system":
             continue
         converse_messages.append({
-            "role": role,
+            "role": m["role"],
             "content": [{"text": m["content"]}],
         })
 
-    # Bedrock Converse requires alternating user/assistant turns.
-    # Merge consecutive same-role messages.
+    # Merge consecutive same-role messages (Bedrock requires alternating turns)
     merged: list[dict] = []
     for msg in converse_messages:
         if merged and merged[-1]["role"] == msg["role"]:
@@ -57,7 +67,6 @@ def chat(
         else:
             merged.append(msg)
 
-    # Ensure first message is from user
     if merged and merged[0]["role"] != "user":
         merged.insert(0, {"role": "user", "content": [{"text": "Begin."}]})
 
