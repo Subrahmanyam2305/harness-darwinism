@@ -21,6 +21,11 @@ def cmd_evolve(args):
 
     champion = run_evolution(
         max_generations=args.generations,
+        experiment_id=args.experiment_id,
+        population_size=args.population,
+        survivors=args.survivors,
+        seeds_per_generation=args.seeds_per_generation,
+        max_steps=args.max_steps,
     )
     console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
@@ -177,6 +182,11 @@ def main():
 
     p_evolve = sub.add_parser("evolve", help="Run the full evolution loop")
     p_evolve.add_argument("-g", "--generations", type=int, default=5)
+    p_evolve.add_argument("--experiment-id", required=True)
+    p_evolve.add_argument("--population", type=int, default=4)
+    p_evolve.add_argument("--survivors", type=int, default=2)
+    p_evolve.add_argument("--seeds-per-generation", type=int, default=1)
+    p_evolve.add_argument("--max-steps", type=int, default=100)
     p_evolve.set_defaults(func=cmd_evolve)
 
     p_eval = sub.add_parser("eval", help="Evaluate a genome on held-out seeds")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import UTC, datetime
 
 import numpy as np
@@ -13,6 +14,7 @@ from src.agent import EpisodeTrace, play_episode
 from src.config import settings
 from src.db import (
     ensure_indexes,
+    get_all_genomes,
     get_archive,
     get_db,
     get_failure_traces,
@@ -29,8 +31,12 @@ from src.meta_agent import llm_crossover, llm_mutate
 console = Console()
 
 
-def make_id(gen: int, idx: int) -> str:
-    return f"h_g{gen}_{idx:02d}"
+def make_id(gen: int, idx: int, experiment_id: str = "default") -> str:
+    """Return an experiment-scoped harness identifier safe for persistence."""
+    safe_experiment = re.sub(r"[^a-zA-Z0-9_-]", "-", experiment_id).strip("-")
+    if not safe_experiment:
+        raise ValueError("experiment_id must contain a letter or number")
+    return f"{safe_experiment}_g{gen}_{idx:02d}"
 
 
 # ── Seed population ──
@@ -49,16 +55,17 @@ STARTER_RULE_POOL = [
 ]
 
 
-def seed_population(n: int = 10) -> list[Genome]:
+def seed_population(n: int = 10, *, experiment_id: str = "default") -> list[Genome]:
     """Create generation 0 with varied rule subsets."""
     population = []
     for i in range(n):
         k = random.randint(1, min(5, len(STARTER_RULE_POOL)))
         rules = random.sample(STARTER_RULE_POOL, k)
         genome = Genome(
-            id=make_id(0, i),
+            id=make_id(0, i, experiment_id),
             generation=0,
             genome=GenomeConfig(rules=rules),
+            arm=experiment_id,
         )
         population.append(genome)
     return population
@@ -68,13 +75,19 @@ def seed_population(n: int = 10) -> list[Genome]:
 
 
 def evaluate_genome(
-    genome: Genome, seeds: list[int]
+    genome: Genome, seeds: list[int], *, max_steps: int | None = None
 ) -> tuple[Fitness, list[EpisodeTrace]]:
     """Play multiple seeds, return aggregate fitness and traces."""
     traces: list[EpisodeTrace] = []
     for seed in seeds:
         console.print(f"  [dim]Playing seed {seed}...[/dim]", end=" ")
-        trace = play_episode(genome, seed, max_steps=settings.max_steps_per_episode)
+        trace = play_episode(
+            genome,
+            seed,
+            max_steps=(
+                max_steps if max_steps is not None else settings.max_steps_per_episode
+            ),
+        )
         traces.append(trace)
         console.print(f"score={trace.score:.1f}, steps={trace.steps}")
 
@@ -146,10 +159,28 @@ def run_generation(
     population: list[Genome],
     seeds: list[int],
     db=None,
+    *,
+    population_size: int | None = None,
+    n_survivors: int | None = None,
+    max_steps: int | None = None,
+    max_mutation_attempts: int = 3,
 ) -> list[Genome]:
     """Execute one full generation of the GA."""
     if db is None:
         db = get_db()
+
+    target_size = (
+        population_size if population_size is not None else settings.population_size
+    )
+    survivor_count = n_survivors if n_survivors is not None else settings.survivors
+    if len(population) != target_size:
+        raise ValueError(
+            f"Expected population size {target_size}, received {len(population)}"
+        )
+    if not 1 <= survivor_count < target_size:
+        raise ValueError("survivors must be between 1 and population_size - 1")
+    if not seeds:
+        raise ValueError("At least one shared training seed is required")
 
     console.rule(f"[bold blue]Generation {gen}[/bold blue]")
 
@@ -157,7 +188,7 @@ def run_generation(
     console.print("[bold]Phase 1: Evaluate[/bold]")
     for genome in population:
         console.print(f"\n[cyan]{genome.id}[/cyan] ({len(genome.genome.rules)} rules)")
-        fitness, traces = evaluate_genome(genome, seeds)
+        fitness, traces = evaluate_genome(genome, seeds, max_steps=max_steps)
         genome.fitness = fitness
 
         for trace in traces:
@@ -171,7 +202,17 @@ def run_generation(
                     "achievements": trace.achievements,
                     "steps": trace.steps,
                     "failure_summary": trace.failure_summary,
+                    "history": trace.history,
                     "history_len": len(trace.history),
+                    "attempts": trace.attempts,
+                    "termination_reason": trace.termination_reason,
+                    "provider": trace.provider,
+                    "model": trace.model,
+                    "input_tokens": trace.input_tokens,
+                    "output_tokens": trace.output_tokens,
+                    "cost_usd": trace.cost_usd,
+                    "latency_seconds": trace.latency_seconds,
+                    "harness": trace.harness,
                     "arm": genome.arm,
                     "timestamp": datetime.now(UTC),
                 },
@@ -184,8 +225,7 @@ def run_generation(
 
     # 2. Select
     console.print("\n[bold]Phase 2: Select[/bold]")
-    n_survivors = settings.survivors
-    survivors, culled = select_and_archive(population, n_survivors)
+    survivors, culled = select_and_archive(population, survivor_count)
 
     for g in culled:
         upsert_genome(db, g)
@@ -197,7 +237,7 @@ def run_generation(
     # 3. Breed children
     console.print("\n[bold]Phase 3: Crossover + Mutate[/bold]")
     archive = get_archive(db, arm=population[0].arm if population else "full")
-    n_children = settings.population_size - n_survivors
+    n_children = target_size - survivor_count
     pairs = weighted_pairs(survivors, archive, n_children)
 
     children: list[Genome] = []
@@ -211,19 +251,26 @@ def run_generation(
         traces_b = get_failure_traces(db, parent_b.id)
         failure_traces = traces_a + traces_b
 
-        child_config, mutation_note = llm_mutate(child_config, failure_traces)
-
-        # Check ledger
-        edit_hash = child_config.content_hash()
-        if ledger_check(db, edit_hash):
-            console.print("[yellow]duplicate, re-mutating[/yellow]")
-            child_config, mutation_note = llm_mutate(child_config, failure_traces)
+        tried_edits: list[str] = []
+        for attempt in range(1, max_mutation_attempts + 1):
+            child_config, mutation_note = llm_mutate(
+                child_config, failure_traces, tried_edits=tried_edits
+            )
             edit_hash = child_config.content_hash()
-
-        ledger_add(db, edit_hash, mutation_note)
+            if not ledger_check(db, edit_hash):
+                ledger_add(db, edit_hash, mutation_note)
+                break
+            tried_edits.append(mutation_note)
+            console.print(
+                f"[yellow]duplicate mutation {attempt}/{max_mutation_attempts}[/yellow]"
+            )
+        else:
+            raise RuntimeError(
+                f"Could not produce a unique child after {max_mutation_attempts} attempts"
+            )
 
         child = Genome(
-            id=make_id(gen + 1, child_idx),
+            id=make_id(gen + 1, child_idx, parent_a.arm),
             generation=gen + 1,
             parents=[parent_a.id, parent_b.id],
             genome=child_config,
@@ -234,15 +281,28 @@ def run_generation(
         upsert_genome(db, child)
         console.print(f"→ {child.id}: {mutation_note}")
 
-    # Promote survivors to next generation
-    next_population = []
-    for i, g in enumerate(survivors):
-        g.generation = gen + 1
-        g.id = make_id(gen + 1, n_children + i)
-        upsert_genome(db, g)
-        next_population.append(g)
+    # Preserve evaluated survivors and carry cloned descendants into the next generation.
+    carried: list[Genome] = []
+    for i, survivor in enumerate(survivors):
+        survivor.status = "archived"
+        upsert_genome(db, survivor)
+        promoted = Genome(
+            id=make_id(gen + 1, n_children + i, survivor.arm),
+            generation=gen + 1,
+            parents=[survivor.id],
+            genome=survivor.genome.model_copy(deep=True),
+            fitness=survivor.fitness.model_copy(deep=True),
+            mutation_note=f"Carried forward from {survivor.id}",
+            arm=survivor.arm,
+        )
+        upsert_genome(db, promoted)
+        carried.append(promoted)
 
-    next_population = children + next_population
+    next_population = children + carried
+    if len(next_population) != target_size:
+        raise RuntimeError(
+            f"Generation {gen + 1} has {len(next_population)} genomes, expected {target_size}"
+        )
 
     # 4. Record metrics
     scores = [g.fitness.score for g in population]
@@ -253,6 +313,7 @@ def run_generation(
         best_score=max(scores),
         mean_score=float(np.mean(scores)),
         population_size=len(population),
+        seeds=seeds,
     )
 
     return next_population
@@ -287,46 +348,114 @@ def _print_scoreboard(population: list[Genome], gen: int) -> None:
 def run_evolution(
     max_generations: int | None = None,
     train_seeds: list[int] | None = None,
+    *,
+    experiment_id: str = "default",
+    population_size: int | None = None,
+    survivors: int | None = None,
+    seeds_per_generation: int | None = None,
+    max_steps: int | None = None,
 ) -> Genome:
-    """Run the full GA loop. Returns the champion."""
+    """Run evolutionary transitions, evaluate the final generation, and return its champion."""
     db = get_db()
+    if db is None:
+        raise RuntimeError("Atlas is required for evolution runs")
     ensure_indexes(db)
 
-    max_gen = max_generations or settings.max_generations
+    max_gen = (
+        max_generations if max_generations is not None else settings.max_generations
+    )
+    target_size = (
+        population_size if population_size is not None else settings.population_size
+    )
+    survivor_count = survivors if survivors is not None else settings.survivors
+    seed_count = (
+        seeds_per_generation
+        if seeds_per_generation is not None
+        else settings.seeds_per_gen
+    )
+    step_limit = max_steps if max_steps is not None else settings.max_steps_per_episode
     all_train_seeds = train_seeds or list(range(100, 130))
+    if max_gen <= 0:
+        raise ValueError("max_generations must be positive")
+    if target_size < 2:
+        raise ValueError("population_size must be at least 2")
+    if not 1 <= survivor_count < target_size:
+        raise ValueError("survivors must be between 1 and population_size - 1")
+    if step_limit <= 0:
+        raise ValueError("max_steps must be positive")
+    if seed_count <= 0 or seed_count > len(all_train_seeds):
+        raise ValueError("seeds_per_generation must fit within train_seeds")
+    shared_seeds = random.sample(all_train_seeds, seed_count)
+    if get_all_genomes(db, arm=experiment_id):
+        raise ValueError(
+            f"Experiment {experiment_id!r} already exists; choose a new experiment ID"
+        )
 
     # Seed generation 0
-    population = seed_population(settings.population_size)
+    population = seed_population(target_size, experiment_id=experiment_id)
     for g in population:
         upsert_genome(db, g)
 
     console.print(
-        f"[bold green]Starting evolution: {max_gen} generations, pop={settings.population_size}[/bold green]\n"
+        f"[bold green]Starting evolution: {max_gen} transitions, pop={target_size}, "
+        f"seeds={shared_seeds}, steps={step_limit}[/bold green]\n"
     )
 
-    best_score = 0.0
-    stale_count = 0
-
     for gen in range(max_gen):
-        seeds = random.sample(
-            all_train_seeds, min(settings.seeds_per_gen, len(all_train_seeds))
+        population = run_generation(
+            gen,
+            population,
+            shared_seeds,
+            db,
+            population_size=target_size,
+            n_survivors=survivor_count,
+            max_steps=step_limit,
         )
-        population = run_generation(gen, population, seeds, db)
 
-        gen_best = max(g.fitness.score for g in population)
-        if gen_best > best_score + 0.5:
-            best_score = gen_best
-            stale_count = 0
-        else:
-            stale_count += 1
-
-        if stale_count >= 3:
-            console.print(
-                "[yellow]No improvement for 3 generations — stopping early.[/yellow]"
+    # Evaluate offspring before crowning a champion.
+    final_generation = max_gen
+    for genome in population:
+        fitness, traces = evaluate_genome(genome, shared_seeds, max_steps=step_limit)
+        genome.fitness = fitness
+        for trace in traces:
+            insert_run(
+                db,
+                {
+                    "genome_id": genome.id,
+                    "generation": final_generation,
+                    "seed": trace.seed,
+                    "score": trace.score,
+                    "achievements": trace.achievements,
+                    "steps": trace.steps,
+                    "failure_summary": trace.failure_summary,
+                    "history": trace.history,
+                    "history_len": len(trace.history),
+                    "attempts": trace.attempts,
+                    "termination_reason": trace.termination_reason,
+                    "provider": trace.provider,
+                    "model": trace.model,
+                    "input_tokens": trace.input_tokens,
+                    "output_tokens": trace.output_tokens,
+                    "cost_usd": trace.cost_usd,
+                    "latency_seconds": trace.latency_seconds,
+                    "harness": trace.harness,
+                    "arm": genome.arm,
+                    "timestamp": datetime.now(UTC),
+                },
             )
-            break
+        upsert_genome(db, genome)
 
-    # Crown champion
+    final_scores = [genome.fitness.score for genome in population]
+    record_metrics(
+        db,
+        final_generation,
+        arm=experiment_id,
+        best_score=max(final_scores),
+        mean_score=float(np.mean(final_scores)),
+        population_size=len(population),
+        seeds=shared_seeds,
+    )
+
     champion = max(population, key=lambda g: g.fitness.score)
     champion.status = "champion"
     upsert_genome(db, champion)

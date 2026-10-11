@@ -245,7 +245,13 @@ def ledger_add(db, edit_hash: str, note: str) -> None:
 
 
 def record_metrics(
-    db, gen: int, arm: str, best_score: float, mean_score: float, population_size: int
+    db,
+    gen: int,
+    arm: str,
+    best_score: float,
+    mean_score: float,
+    population_size: int,
+    seeds: list[int] | None = None,
 ) -> None:
     doc = {
         "generation": gen,
@@ -253,6 +259,7 @@ def record_metrics(
         "best_score": best_score,
         "mean_score": mean_score,
         "population_size": population_size,
+        "seeds": seeds or [],
         "timestamp": datetime.now(UTC).isoformat(),
     }
     if db is not None:
