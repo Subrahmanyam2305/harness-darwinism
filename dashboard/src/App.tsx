@@ -11,8 +11,10 @@ import type { GenomeSummary } from "./api";
 import "./App.css";
 
 function App() {
+  const arm =
+    new URLSearchParams(window.location.search).get("arm") ?? "full";
   const { metrics, tree, achievements, genomes, loading, refresh } =
-    useEvolutionData(4000);
+    useEvolutionData(arm, 4000);
   const [selected, setSelected] = useState<GenomeSummary | null>(null);
   const [replayRuns, setReplayRuns] = useState<any[]>([]);
   const [replayGenomeId, setReplayGenomeId] = useState<string>("");

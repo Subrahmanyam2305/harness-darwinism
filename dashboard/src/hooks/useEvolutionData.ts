@@ -9,7 +9,7 @@ import {
   type GenomeSummary,
 } from "../api";
 
-export function useEvolutionData(pollInterval = 5000) {
+export function useEvolutionData(arm = "full", pollInterval = 5000) {
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
   const [tree, setTree] = useState<TreeData>({ nodes: [], edges: [] });
   const [achievements, setAchievements] = useState<{
@@ -22,10 +22,10 @@ export function useEvolutionData(pollInterval = 5000) {
   const refresh = useCallback(async () => {
     try {
       const [m, t, a, g] = await Promise.all([
-        fetchMetrics(),
-        fetchTree(),
-        fetchAchievements(),
-        fetchGenomes(),
+        fetchMetrics(arm),
+        fetchTree(arm),
+        fetchAchievements(arm),
+        fetchGenomes(arm),
       ]);
       setMetrics(m);
       setTree(t);
@@ -36,7 +36,7 @@ export function useEvolutionData(pollInterval = 5000) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [arm]);
 
   useEffect(() => {
     refresh();
