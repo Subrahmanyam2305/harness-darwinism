@@ -3,8 +3,31 @@
 from copy import deepcopy
 
 from src.agent import EpisodeTrace
-from src.evolution import run_generation, seed_population
-from src.genome import Fitness, GenomeConfig
+from src.evolution import evaluate_genome, run_generation, seed_population
+from src.genome import Fitness, Genome, GenomeConfig
+
+
+def test_agent_error_becomes_zero_fitness_and_keeps_trace(monkeypatch) -> None:
+    genome = Genome(id="failed-candidate")
+    failed_trace = EpisodeTrace(
+        genome_id=genome.id,
+        seed=127,
+        score=1.25,
+        achievements={"collect_wood": True},
+        steps=42,
+        termination_reason="agent_error",
+        attempts=[{"attempt": 3, "error": "invalid_output"}],
+        error="Three inference attempts failed at game step 42",
+    )
+    monkeypatch.setattr(
+        "src.evolution.play_episode", lambda *args, **kwargs: failed_trace
+    )
+
+    fitness, traces = evaluate_genome(genome, [127], max_steps=100)
+
+    assert fitness.score == 0.0
+    assert fitness.mean_steps == 42
+    assert traces == [failed_trace]
 
 
 def test_generation_preserves_lineage_population_and_retries_duplicates(

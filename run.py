@@ -26,6 +26,7 @@ def cmd_evolve(args):
         survivors=args.survivors,
         seeds_per_generation=args.seeds_per_generation,
         max_steps=args.max_steps,
+        resume=args.resume,
     )
     console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
@@ -187,6 +188,11 @@ def main():
     p_evolve.add_argument("--survivors", type=int, default=2)
     p_evolve.add_argument("--seeds-per-generation", type=int, default=1)
     p_evolve.add_argument("--max-steps", type=int, default=100)
+    p_evolve.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume an interrupted generation 0 experiment from Atlas evidence",
+    )
     p_evolve.set_defaults(func=cmd_evolve)
 
     p_eval = sub.add_parser("eval", help="Evaluate a genome on held-out seeds")

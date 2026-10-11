@@ -18,6 +18,7 @@ from src.db import (
     get_archive,
     get_db,
     get_failure_traces,
+    get_runs_for_genome,
     insert_run,
     ledger_add,
     ledger_check,
@@ -92,16 +93,47 @@ def evaluate_genome(
         console.print(f"score={trace.score:.1f}, steps={trace.steps}")
 
     evaluation = summarize_traces(traces)
-    if not evaluation.complete or evaluation.score is None:
-        raise RuntimeError(f"Incomplete evaluation for {genome.id}: agent_error")
+    score = evaluation.score if evaluation.score is not None else 0.0
+    if not evaluation.complete:
+        console.print(
+            f"  [yellow]{genome.id} ended with agent_error; assigning score=0 "
+            "and retaining its trace[/yellow]"
+        )
 
     fitness = Fitness(
-        score=evaluation.score,
+        score=score,
         achievements=evaluation.achievement_rates,
         mean_steps=evaluation.mean_steps,
         cost_usd=evaluation.cost_usd or 0.0,
     )
     return fitness, traces
+
+
+def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
+    """Build the complete Atlas evidence document for one evaluated episode."""
+    return {
+        "genome_id": genome.id,
+        "generation": generation,
+        "seed": trace.seed,
+        "score": trace.score,
+        "achievements": trace.achievements,
+        "steps": trace.steps,
+        "failure_summary": trace.failure_summary,
+        "history": trace.history,
+        "history_len": len(trace.history),
+        "attempts": trace.attempts,
+        "termination_reason": trace.termination_reason,
+        "error": trace.error,
+        "provider": trace.provider,
+        "model": trace.model,
+        "input_tokens": trace.input_tokens,
+        "output_tokens": trace.output_tokens,
+        "cost_usd": trace.cost_usd,
+        "latency_seconds": trace.latency_seconds,
+        "harness": trace.harness,
+        "arm": genome.arm,
+        "timestamp": datetime.now(UTC),
+    }
 
 
 # ── Selection ──
@@ -164,6 +196,7 @@ def run_generation(
     n_survivors: int | None = None,
     max_steps: int | None = None,
     max_mutation_attempts: int = 3,
+    reuse_completed: bool = False,
 ) -> list[Genome]:
     """Execute one full generation of the GA."""
     if db is None:
@@ -188,35 +221,29 @@ def run_generation(
     console.print("[bold]Phase 1: Evaluate[/bold]")
     for genome in population:
         console.print(f"\n[cyan]{genome.id}[/cyan] ({len(genome.genome.rules)} rules)")
+        if reuse_completed:
+            completed_seeds = {
+                run.get("seed")
+                for run in get_runs_for_genome(db, genome.id)
+                if run.get("generation") == gen
+            }
+            requested_seeds = set(seeds)
+            if completed_seeds == requested_seeds:
+                console.print(
+                    f"  [green]Reusing stored evaluation for seeds "
+                    f"{sorted(requested_seeds)}[/green]"
+                )
+                continue
+            if completed_seeds:
+                raise RuntimeError(
+                    f"Cannot resume partially evaluated seed set for {genome.id}: "
+                    f"stored={sorted(completed_seeds)}, requested={sorted(requested_seeds)}"
+                )
         fitness, traces = evaluate_genome(genome, seeds, max_steps=max_steps)
         genome.fitness = fitness
 
         for trace in traces:
-            insert_run(
-                db,
-                {
-                    "genome_id": genome.id,
-                    "generation": gen,
-                    "seed": trace.seed,
-                    "score": trace.score,
-                    "achievements": trace.achievements,
-                    "steps": trace.steps,
-                    "failure_summary": trace.failure_summary,
-                    "history": trace.history,
-                    "history_len": len(trace.history),
-                    "attempts": trace.attempts,
-                    "termination_reason": trace.termination_reason,
-                    "provider": trace.provider,
-                    "model": trace.model,
-                    "input_tokens": trace.input_tokens,
-                    "output_tokens": trace.output_tokens,
-                    "cost_usd": trace.cost_usd,
-                    "latency_seconds": trace.latency_seconds,
-                    "harness": trace.harness,
-                    "arm": genome.arm,
-                    "timestamp": datetime.now(UTC),
-                },
-            )
+            insert_run(db, _run_document(genome, trace, gen))
 
         upsert_genome(db, genome)
 
@@ -354,6 +381,7 @@ def run_evolution(
     survivors: int | None = None,
     seeds_per_generation: int | None = None,
     max_steps: int | None = None,
+    resume: bool = False,
 ) -> Genome:
     """Run evolutionary transitions, evaluate the final generation, and return its champion."""
     db = get_db()
@@ -385,16 +413,43 @@ def run_evolution(
         raise ValueError("max_steps must be positive")
     if seed_count <= 0 or seed_count > len(all_train_seeds):
         raise ValueError("seeds_per_generation must fit within train_seeds")
-    shared_seeds = random.sample(all_train_seeds, seed_count)
-    if get_all_genomes(db, arm=experiment_id):
+    existing_genomes = get_all_genomes(db, arm=experiment_id)
+    if existing_genomes and not resume:
         raise ValueError(
-            f"Experiment {experiment_id!r} already exists; choose a new experiment ID"
+            f"Experiment {experiment_id!r} already exists; choose a new experiment ID "
+            "or pass --resume"
         )
-
-    # Seed generation 0
-    population = seed_population(target_size, experiment_id=experiment_id)
-    for g in population:
-        upsert_genome(db, g)
+    if resume:
+        if not existing_genomes:
+            raise ValueError(f"Experiment {experiment_id!r} does not exist")
+        generations = {genome.generation for genome in existing_genomes}
+        if generations != {0}:
+            raise ValueError(
+                "Resume currently requires an interrupted generation 0 experiment"
+            )
+        population = [genome for genome in existing_genomes if genome.status == "alive"]
+        if len(population) != target_size:
+            raise ValueError(
+                f"Stored generation 0 has {len(population)} live genomes, "
+                f"expected {target_size}"
+            )
+        stored_seeds = {
+            run.get("seed")
+            for genome in population
+            for run in get_runs_for_genome(db, genome.id)
+            if run.get("generation") == 0 and run.get("seed") is not None
+        }
+        if len(stored_seeds) != seed_count:
+            raise ValueError(
+                f"Stored run evidence has seeds {sorted(stored_seeds)}, "
+                f"expected {seed_count} shared seed(s)"
+            )
+        shared_seeds = sorted(stored_seeds)
+    else:
+        shared_seeds = random.sample(all_train_seeds, seed_count)
+        population = seed_population(target_size, experiment_id=experiment_id)
+        for g in population:
+            upsert_genome(db, g)
 
     console.print(
         f"[bold green]Starting evolution: {max_gen} transitions, pop={target_size}, "
@@ -410,6 +465,7 @@ def run_evolution(
             population_size=target_size,
             n_survivors=survivor_count,
             max_steps=step_limit,
+            reuse_completed=resume and gen == 0,
         )
 
     # Evaluate offspring before crowning a champion.
@@ -418,31 +474,7 @@ def run_evolution(
         fitness, traces = evaluate_genome(genome, shared_seeds, max_steps=step_limit)
         genome.fitness = fitness
         for trace in traces:
-            insert_run(
-                db,
-                {
-                    "genome_id": genome.id,
-                    "generation": final_generation,
-                    "seed": trace.seed,
-                    "score": trace.score,
-                    "achievements": trace.achievements,
-                    "steps": trace.steps,
-                    "failure_summary": trace.failure_summary,
-                    "history": trace.history,
-                    "history_len": len(trace.history),
-                    "attempts": trace.attempts,
-                    "termination_reason": trace.termination_reason,
-                    "provider": trace.provider,
-                    "model": trace.model,
-                    "input_tokens": trace.input_tokens,
-                    "output_tokens": trace.output_tokens,
-                    "cost_usd": trace.cost_usd,
-                    "latency_seconds": trace.latency_seconds,
-                    "harness": trace.harness,
-                    "arm": genome.arm,
-                    "timestamp": datetime.now(UTC),
-                },
-            )
+            insert_run(db, _run_document(genome, trace, final_generation))
         upsert_genome(db, genome)
 
     final_scores = [genome.fitness.score for genome in population]
