@@ -6,11 +6,10 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from openai import OpenAI
-
 from src.config import settings
 from src.crafter_env import ACTIONS, CrafterTextEnv
 from src.genome import Genome
+from src.llm import chat
 
 
 @dataclass
@@ -41,7 +40,7 @@ def _build_system_prompt(genome: Genome) -> str:
     parts.append("")
 
     parts.append("## Response Format")
-    parts.append("Respond with ONLY a JSON object: {\"thought\": \"brief reasoning\", \"action\": \"action_name\"}")
+    parts.append('Respond with ONLY a JSON object: {"thought": "brief reasoning", "action": "action_name"}')
     parts.append("The action must be one of the available actions listed above.")
 
     return "\n".join(parts)
@@ -67,49 +66,46 @@ def _parse_action(response: str) -> str:
 
 def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrace:
     """Run one Crafter episode with the given genome's harness."""
-    client = OpenAI(api_key=settings.openai_api_key)
     env = CrafterTextEnv(seed=seed, max_steps=max_steps)
-
     system_prompt = _build_system_prompt(genome)
-    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+
+    messages: list[dict] = []
     history: list[dict] = []
-    notes: list[str] = []  # agent's scratchpad memory
+    notes: list[str] = []
 
     obs = env.reset()
 
     while True:
-        # Build user message with observation + notes
         user_parts = [f"Observation:\n{obs}"]
         if notes:
-            user_parts.append(f"\nYour notes:\n" + "\n".join(f"- {n}" for n in notes[-genome.genome.memory_policy.max_items:]))
+            max_notes = genome.genome.memory_policy.max_items
+            user_parts.append("\nYour notes:\n" + "\n".join(f"- {n}" for n in notes[-max_notes:]))
         user_parts.append(f"\nStep {env.step_count + 1}/{max_steps}. Choose your action.")
 
         user_msg = "\n".join(user_parts)
 
         # Trim history to context budget
         ctx = genome.genome.context_budget.history_steps
-        trimmed = [messages[0]] + messages[max(1, len(messages) - ctx * 2):]
+        trimmed = messages[max(0, len(messages) - ctx * 2):]
         trimmed.append({"role": "user", "content": user_msg})
 
         try:
-            resp = client.chat.completions.create(
-                model=settings.agent_model,
+            reply = chat(
                 messages=trimmed,
+                system=system_prompt,
+                model=settings.agent_model,
                 max_tokens=150,
                 temperature=0.3,
             )
-            reply = resp.choices[0].message.content or '{"action": "noop"}'
         except Exception as e:
             reply = '{"action": "noop"}'
             history.append({"step": env.step_count, "error": str(e)})
 
         action = _parse_action(reply)
 
-        # Track for message history
         messages.append({"role": "user", "content": user_msg})
         messages.append({"role": "assistant", "content": reply})
 
-        # Execute
         obs, reward, done, info = env.step(action)
 
         history.append({
@@ -119,10 +115,9 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
             "obs_snippet": obs[:200],
         })
 
-        # Simple note-taking: if something interesting happened
         if reward > 0:
             notes.append(f"Step {env.step_count}: got reward {reward} from {action}")
-        if "health" in obs and "health=1" in obs:
+        if "health=1" in obs or "health=2" in obs:
             notes.append(f"Step {env.step_count}: critically low health!")
 
         if done:
@@ -130,8 +125,6 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
 
     score = env.get_score()
     achievements = env.get_achievements()
-
-    # Generate failure summary
     failure_summary = _summarize_failure(history, achievements, env.step_count, max_steps)
 
     return EpisodeTrace(
@@ -151,7 +144,7 @@ def _summarize_failure(
     steps: int,
     max_steps: int,
 ) -> str:
-    """Quick text summary of what went wrong (used by the meta-agent)."""
+    """Quick text summary of what went wrong."""
     unlocked = [k for k, v in achievements.items() if v]
     missed = [k for k, v in achievements.items() if not v]
 
@@ -159,8 +152,8 @@ def _summarize_failure(
     lines.append(f"Unlocked: {', '.join(unlocked) if unlocked else 'none'}")
     lines.append(f"Missed: {', '.join(missed[:5])}{'...' if len(missed) > 5 else ''}")
 
-    death_step = history[-1] if history else {}
     if steps < max_steps:
+        death_step = history[-1] if history else {}
         lines.append(f"Died at step {steps}. Last action: {death_step.get('action', '?')}")
 
     action_counts: dict[str, int] = {}

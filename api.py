@@ -22,6 +22,12 @@ def health():
     return {"status": "ok"}
 
 
+def _safe_timestamp(val):
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val) if val else None
+
+
 @app.get("/api/metrics")
 def metrics(arm: str = "full"):
     """Fitness curve: best/mean score per generation."""
@@ -30,7 +36,7 @@ def metrics(arm: str = "full"):
     for r in rows:
         r.pop("_id", None)
         if "timestamp" in r:
-            r["timestamp"] = r["timestamp"].isoformat()
+            r["timestamp"] = _safe_timestamp(r["timestamp"])
     return rows
 
 
@@ -54,7 +60,7 @@ def genome_detail(genome_id: str):
     for r in runs:
         r.pop("_id", None)
         if "timestamp" in r:
-            r["timestamp"] = r["timestamp"].isoformat()
+            r["timestamp"] = _safe_timestamp(r["timestamp"])
     return {"genome": g.model_dump(), "runs": runs}
 
 

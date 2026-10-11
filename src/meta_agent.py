@@ -5,16 +5,13 @@ from __future__ import annotations
 import json
 import re
 
-from openai import OpenAI
-
 from src.config import settings
 from src.genome import GenomeConfig
+from src.llm import chat
 
 
 def llm_crossover(parent_a: GenomeConfig, parent_b: GenomeConfig) -> GenomeConfig:
     """Merge two parent genomes into a child genome using an LLM."""
-    client = OpenAI(api_key=settings.openai_api_key)
-
     prompt = f"""You are an evolution operator. Merge the best traits of two parent agent configurations into one child.
 
 ## Parent A
@@ -44,14 +41,13 @@ Respond with ONLY a JSON object:
   "context_budget": {{"history_steps": N}}
 }}"""
 
-    resp = client.chat.completions.create(
-        model=settings.meta_model,
+    resp = chat(
         messages=[{"role": "user", "content": prompt}],
+        model=settings.meta_model,
         max_tokens=600,
         temperature=0.7,
     )
-
-    return _parse_genome_config(resp.choices[0].message.content or "{}")
+    return _parse_genome_config(resp)
 
 
 def llm_mutate(
@@ -60,8 +56,6 @@ def llm_mutate(
     tried_edits: list[str] | None = None,
 ) -> tuple[GenomeConfig, str]:
     """Mutate a genome based on failure traces. Returns (new_config, mutation_note)."""
-    client = OpenAI(api_key=settings.openai_api_key)
-
     traces_text = "\n---\n".join(failure_traces[:3])
     tried_text = ""
     if tried_edits:
@@ -98,16 +92,15 @@ Respond with ONLY a JSON object:
   "mutation_note": "one-line description of what you changed and why"
 }}"""
 
-    resp = client.chat.completions.create(
-        model=settings.meta_model,
+    resp = chat(
         messages=[{"role": "user", "content": prompt}],
+        model=settings.meta_model,
         max_tokens=800,
         temperature=0.8,
     )
 
-    raw = resp.choices[0].message.content or "{}"
     try:
-        match = re.search(r'\{[\s\S]+\}', raw)
+        match = re.search(r'\{[\s\S]+\}', resp)
         if match:
             data = json.loads(match.group())
             config = GenomeConfig(**data.get("config", data))

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # LLM
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    agent_model: str = "gpt-4o-mini"
-    meta_model: str = "gpt-4o"
+    # Bedrock models
+    agent_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    meta_model: str = "us.anthropic.claude-opus-4-6-v1"
+    aws_region: str = "us-east-1"
 
     # MongoDB
     mongodb_uri: str = "mongodb://localhost:27017"
