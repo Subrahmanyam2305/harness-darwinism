@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import os
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 import boto3
+
+from src.config import settings
 
 _client: Any = None
 
@@ -15,10 +18,10 @@ def _get_client():
     if _client is None:
         _client = boto3.client(
             "bedrock-runtime",
-            region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-            aws_session_token=os.environ.get("AWS_SESSION_TOKEN"),
+            region_name=settings.aws_default_region,
+            aws_access_key_id=settings.aws_access_key_id or None,
+            aws_secret_access_key=settings.aws_secret_access_key or None,
+            aws_session_token=settings.aws_session_token or None,
         )
     return _client
 
@@ -27,6 +30,69 @@ def reset_client():
     """Force re-creation of the Bedrock client (e.g. after refreshing creds)."""
     global _client
     _client = None
+
+
+@dataclass(frozen=True)
+class LLMResponse:
+    """Text plus Bedrock evidence needed by gameplay traces."""
+
+    text: str
+    model: str
+    input_tokens: int | None
+    output_tokens: int | None
+    latency_seconds: float
+
+
+def converse(
+    messages: list[dict],
+    model: str,
+    max_tokens: int = 300,
+    temperature: float = 0.3,
+    system: str | None = None,
+) -> LLMResponse:
+    """Send one Bedrock Converse request and retain usage metadata."""
+    client = _get_client()
+
+    converse_messages = []
+    for message in messages:
+        if message["role"] == "system":
+            continue
+        converse_messages.append(
+            {
+                "role": message["role"],
+                "content": [{"text": message["content"]}],
+            }
+        )
+
+    merged: list[dict] = []
+    for message in converse_messages:
+        if merged and merged[-1]["role"] == message["role"]:
+            merged[-1]["content"][0]["text"] += "\n" + message["content"][0]["text"]
+        else:
+            merged.append(message)
+    if merged and merged[0]["role"] != "user":
+        merged.insert(0, {"role": "user", "content": [{"text": "Begin."}]})
+
+    kwargs: dict[str, Any] = {
+        "modelId": model,
+        "messages": merged,
+        "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
+    }
+    if system:
+        kwargs["system"] = [{"text": system}]
+
+    started = perf_counter()
+    response = client.converse(**kwargs)
+    latency = perf_counter() - started
+    output = response["output"]["message"]["content"]
+    usage = response.get("usage", {})
+    return LLMResponse(
+        text=output[0]["text"] if output else "",
+        model=response.get("modelId", model),
+        input_tokens=usage.get("inputTokens"),
+        output_tokens=usage.get("outputTokens"),
+        latency_seconds=latency,
+    )
 
 
 def chat(
@@ -48,40 +114,4 @@ def chat(
     Returns:
         The assistant's text response.
     """
-    client = _get_client()
-
-    converse_messages = []
-    for m in messages:
-        if m["role"] == "system":
-            continue
-        converse_messages.append({
-            "role": m["role"],
-            "content": [{"text": m["content"]}],
-        })
-
-    # Merge consecutive same-role messages (Bedrock requires alternating turns)
-    merged: list[dict] = []
-    for msg in converse_messages:
-        if merged and merged[-1]["role"] == msg["role"]:
-            merged[-1]["content"][0]["text"] += "\n" + msg["content"][0]["text"]
-        else:
-            merged.append(msg)
-
-    if merged and merged[0]["role"] != "user":
-        merged.insert(0, {"role": "user", "content": [{"text": "Begin."}]})
-
-    kwargs: dict[str, Any] = {
-        "modelId": model,
-        "messages": merged,
-        "inferenceConfig": {
-            "maxTokens": max_tokens,
-            "temperature": temperature,
-        },
-    }
-
-    if system:
-        kwargs["system"] = [{"text": system}]
-
-    response = client.converse(**kwargs)
-    output = response["output"]["message"]["content"]
-    return output[0]["text"] if output else ""
+    return converse(messages, model, max_tokens, temperature, system).text

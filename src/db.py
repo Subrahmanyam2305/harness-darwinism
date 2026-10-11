@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
+from pymongo.errors import PyMongoError
+
+from src.agent import EpisodeTrace
 from src.config import settings
 from src.genome import Genome
 
@@ -25,12 +28,13 @@ def _check_mongo():
         return False
     try:
         from pymongo import MongoClient
+
         client = MongoClient(settings.mongodb_uri, serverSelectionTimeoutMS=3000)
         client.server_info()
         _db = client[settings.db_name]
         _use_mongo = True
         return True
-    except Exception:
+    except PyMongoError:
         _use_mongo = False
         return False
 
@@ -42,6 +46,7 @@ def get_db():
 
 
 # ── Local JSON helpers ──
+
 
 def _collection_path(name: str) -> Path:
     p = DATA_DIR / name
@@ -72,6 +77,7 @@ def _find_doc(name: str, doc_id: str) -> dict | None:
 
 # ── Indexes ──
 
+
 def ensure_indexes(db=None) -> None:
     if _check_mongo() and db is not None:
         db["harnesses"].create_index("generation")
@@ -86,6 +92,7 @@ def ensure_indexes(db=None) -> None:
 
 
 # ── Harnesses ──
+
 
 def upsert_genome(db, genome: Genome) -> None:
     if db is not None:
@@ -108,8 +115,13 @@ def get_generation(db, gen: int, arm: str = "full") -> list[Genome]:
         return [Genome.from_doc(d) for d in docs]
     else:
         all_docs = _load_docs("harnesses")
-        return [Genome.from_doc(d) for d in all_docs
-                if d.get("generation") == gen and d.get("arm") == arm and d.get("status") == "alive"]
+        return [
+            Genome.from_doc(d)
+            for d in all_docs
+            if d.get("generation") == gen
+            and d.get("arm") == arm
+            and d.get("status") == "alive"
+        ]
 
 
 def get_archive(db, arm: str = "full") -> list[Genome]:
@@ -118,8 +130,11 @@ def get_archive(db, arm: str = "full") -> list[Genome]:
         return [Genome.from_doc(d) for d in docs]
     else:
         all_docs = _load_docs("harnesses")
-        return [Genome.from_doc(d) for d in all_docs
-                if d.get("arm") == arm and d.get("status") == "archived"]
+        return [
+            Genome.from_doc(d)
+            for d in all_docs
+            if d.get("arm") == arm and d.get("status") == "archived"
+        ]
 
 
 def get_all_genomes(db, arm: str | None = None) -> list[Genome]:
@@ -139,12 +154,46 @@ def get_all_genomes(db, arm: str | None = None) -> list[Genome]:
 
 # ── Runs ──
 
+
 def insert_run(db, run_doc: dict) -> None:
     if db is not None:
         db["runs"].insert_one(run_doc)
     else:
         run_id = f"{run_doc['genome_id']}_s{run_doc['seed']}"
         _save_doc("runs", run_id, run_doc)
+
+
+def insert_episode(db, trace: EpisodeTrace, *, artifact_path: str) -> str:
+    """Persist a complete gameplay trace and return its stable run identifier."""
+    run_id = uuid4().hex
+    document = {
+        "_id": run_id,
+        "kind": "gameplay_episode",
+        "genome_id": trace.genome_id,
+        "seed": trace.seed,
+        "score": trace.score,
+        "achievements": trace.achievements,
+        "steps": trace.steps,
+        "termination_reason": trace.termination_reason,
+        "provider": trace.provider,
+        "model": trace.model,
+        "is_stub": trace.is_stub,
+        "artifact_path": artifact_path,
+        "trace": trace.to_dict(),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    if db is not None:
+        db["runs"].insert_one(document)
+    else:
+        _save_doc("runs", run_id, document)
+    return run_id
+
+
+def get_run(db, run_id: str) -> dict | None:
+    """Load one gameplay or evaluation run by its stable identifier."""
+    if db is not None:
+        return db["runs"].find_one({"_id": run_id})
+    return _find_doc("runs", run_id)
 
 
 def get_runs_for_genome(db, genome_id: str) -> list[dict]:
@@ -162,10 +211,15 @@ def get_failure_traces(db, genome_id: str, limit: int = 3) -> list[str]:
     else:
         runs = get_runs_for_genome(db, genome_id)
         runs.sort(key=lambda r: r.get("score", 0))
-        return [r.get("failure_summary", "") for r in runs[:limit] if r.get("failure_summary")]
+        return [
+            r.get("failure_summary", "")
+            for r in runs[:limit]
+            if r.get("failure_summary")
+        ]
 
 
 # ── Ledger ──
+
 
 def ledger_check(db, edit_hash: str) -> bool:
     if db is not None:
@@ -176,7 +230,11 @@ def ledger_check(db, edit_hash: str) -> bool:
 
 
 def ledger_add(db, edit_hash: str, note: str) -> None:
-    doc = {"edit_hash": edit_hash, "note": note, "created_at": datetime.now(timezone.utc).isoformat()}
+    doc = {
+        "edit_hash": edit_hash,
+        "note": note,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
     if db is not None:
         db["ledger"].insert_one(doc)
     else:
@@ -185,14 +243,17 @@ def ledger_add(db, edit_hash: str, note: str) -> None:
 
 # ── Metrics ──
 
-def record_metrics(db, gen: int, arm: str, best_score: float, mean_score: float, population_size: int) -> None:
+
+def record_metrics(
+    db, gen: int, arm: str, best_score: float, mean_score: float, population_size: int
+) -> None:
     doc = {
         "generation": gen,
         "arm": arm,
         "best_score": best_score,
         "mean_score": mean_score,
         "population_size": population_size,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if db is not None:
         db["metrics"].insert_one(doc)

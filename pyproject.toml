@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Genetic algorithm for evolving LLM agent harnesses on Crafter"
 requires-python = ">=3.11"
 dependencies = [
+    "boto3>=1.35",
     "crafter>=1.8",
     "openai>=1.30",
     "anthropic>=0.30",
