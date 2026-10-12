@@ -38,29 +38,90 @@ def make_id(gen: int, idx: int) -> str:
 # ── Seed population ──
 
 STARTER_RULE_POOL = [
-    "Collect wood before anything else.",
-    "Craft a wood pickaxe as soon as you have enough wood.",
-    "Place a crafting table early.",
-    "Sleep when energy is low and no enemies are nearby.",
-    "Attack zombies and skeletons only if you have a sword.",
-    "Collect stone after getting a wood pickaxe.",
-    "Eat plants or cows when food is low.",
-    "Drink water when thirst is low.",
-    "Avoid moving at night without a weapon.",
-    "Build a furnace after collecting stone and wood.",
+    # Core resource loop (wood → tools → stone → iron)
+    "PRIORITY 1: Immediately move to the nearest tree and use 'do' to collect wood. Get at least 4 wood before doing anything else.",
+    "PRIORITY 2: Once you have 2+ wood, use place_table. Then use make_wood_pickaxe and make_wood_sword.",
+    "After getting wood pickaxe, find stone (grey tiles) and use 'do' adjacent to mine it. Get 4+ stone.",
+    "After getting 4 stone, use place_furnace. Then make_stone_pickaxe if you have wood+stone.",
+    # Survival
+    "If food ≤ 3, find a cow or plant and use 'do' adjacent to eat it.",
+    "If drink ≤ 3, find water (blue tiles) and use 'do' adjacent to drink.",
+    "If energy ≤ 2 and no enemies nearby, use sleep action.",
+    "At NIGHT, either sleep or stay near your table/furnace. Don't explore without a sword.",
+    # Interaction discipline
+    "Use 'do' whenever adjacent to ANY resource — tree, stone, coal, water, cow, plant. Never walk past resources.",
+    "Never take more than 4 consecutive move actions without using 'do'. If stuck, try 'do' on the tile you're facing.",
+    # Advanced
+    "After stone pickaxe, go underground (move_down) to find coal and iron. Use 'do' to mine them.",
+    "Collect saplings from trees (use 'do' near trees) and place them with place_plant for the achievement.",
+    "If you see a zombie or skeleton and have a sword, use 'do' adjacent to fight it.",
+]
+
+
+# Pre-built strong genome templates for Gen 0 diversity
+STRONG_TEMPLATE_RULES = [
+    # Template A: Resource-focused
+    [
+        "ALWAYS: Move to nearest tree first, use 'do' repeatedly until 4+ wood collected.",
+        "With 2 wood: place_table. With 1 wood + table nearby: make_wood_pickaxe, then make_wood_sword.",
+        "With wood pickaxe: find and mine stone with 'do'. Get 4+ stone for place_furnace.",
+        "Use 'do' on EVERY adjacent resource — trees, stone, water, cows, plants. Never walk past anything useful.",
+        "If health < 5 or food < 4: find food (cow/plant) and use 'do'. If drink < 4: find water and 'do'.",
+        "At night without sword: use sleep. With sword: fight any adjacent enemies with 'do'.",
+        "After furnace: go underground (move_down), mine coal and iron, make stone/iron tools.",
+    ],
+    # Template B: Achievement-chasing  
+    [
+        "Follow this achievement order: collect_wood → place_table → make_wood_pickaxe → make_wood_sword → collect_drink → collect_sapling → eat_cow → collect_stone → place_furnace.",
+        "For each achievement, identify what you need and go get it. Check 'Can craft NOW' in observations.",
+        "Use 'do' action constantly — at least every 2-3 steps. It's how you interact with everything.",
+        "Keep food ≥ 3, drink ≥ 3, energy ≥ 2. Prioritize survival over achievements when vitals are low.",
+        "Place crafting table and keep track of where it is. Return to it when you need to craft.",
+        "Explore systematically: don't backtrack. Move in one direction until you find what you need.",
+    ],
+    # Template C: Survival-focused
+    [
+        "Step 1-10: Sprint to nearest tree, collect 4 wood with 'do'. Immediately place_table and make_wood_pickaxe + make_wood_sword.",
+        "Step 11-30: Find stone, mine 4+ with 'do'. Find water, drink with 'do'. Find cow/plant, eat with 'do'.",
+        "Step 31+: place_furnace, go underground for coal/iron. Make better tools.",
+        "SURVIVAL: Always keep health > 3, food > 3, drink > 3. Drop everything to eat/drink when low.",
+        "COMBAT: Only fight with sword equipped. Use 'do' when adjacent to enemy.",
+        "NIGHT: Sleep if no sword. Fight or hide if you have one.",
+        "Use 'do' on every single adjacent resource you see. The reward comes from 'do' interactions.",
+    ],
 ]
 
 
 def seed_population(n: int = 10) -> list[Genome]:
-    """Create generation 0 with varied rule subsets."""
+    """Create generation 0 with strong starter templates + random variations."""
     population = []
-    for i in range(n):
-        k = random.randint(1, min(5, len(STARTER_RULE_POOL)))
+
+    # First few genomes use the strong templates
+    for i, template_rules in enumerate(STRONG_TEMPLATE_RULES):
+        if i >= n:
+            break
+        genome = Genome(
+            id=make_id(0, i),
+            generation=0,
+            genome=GenomeConfig(
+                rules=template_rules,
+                system_prompt="You are a Crafter survival agent. Your goal is to unlock as many achievements as possible. Follow the strategy rules carefully. Use 'do' to interact with everything adjacent.",
+                context_budget={"history_steps": 15},
+            ),
+        )
+        population.append(genome)
+
+    # Remaining genomes: random subsets of the starter pool
+    for i in range(len(STRONG_TEMPLATE_RULES), n):
+        k = random.randint(4, min(8, len(STARTER_RULE_POOL)))
         rules = random.sample(STARTER_RULE_POOL, k)
         genome = Genome(
             id=make_id(0, i),
             generation=0,
-            genome=GenomeConfig(rules=rules),
+            genome=GenomeConfig(
+                rules=rules,
+                context_budget={"history_steps": random.choice([10, 15, 20])},
+            ),
         )
         population.append(genome)
     return population

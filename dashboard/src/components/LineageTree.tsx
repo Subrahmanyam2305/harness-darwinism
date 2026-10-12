@@ -36,8 +36,8 @@ export function LineageTree({ data, onSelectGenome }: Props) {
       return {
         id: n.id,
         position: {
-          x: (idx - total / 2) * 160 + 400,
-          y: n.generation * 180 + 50,
+          x: (idx - total / 2) * 200 + 600,
+          y: n.generation * 200 + 50,
         },
         data: {
           label: (
@@ -87,7 +87,7 @@ export function LineageTree({ data, onSelectGenome }: Props) {
   }
 
   return (
-    <div className="panel" style={{ height: 500 }}>
+    <div className="panel" style={{ height: 700 }}>
       <h2>🌳 Lineage Tree</h2>
       <div style={{ height: "calc(100% - 40px)" }}>
         <ReactFlow
