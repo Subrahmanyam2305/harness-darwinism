@@ -137,7 +137,6 @@ function App() {
                 <GenomeDetail
                   genome={selected}
                   genomes={genomes}
-                  onSelectGenome={handleSelectGenome}
                   onClose={() => {
                     setSelected(null);
                     setReplayRuns([]);

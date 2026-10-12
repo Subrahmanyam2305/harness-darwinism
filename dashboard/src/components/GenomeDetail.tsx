@@ -3,14 +3,12 @@ import type { GenomeSummary } from "../api";
 interface Props {
   genome: GenomeSummary | null;
   genomes: GenomeSummary[];
-  onSelectGenome: (id: string) => void;
   onClose: () => void;
 }
 
 export function GenomeDetail({
   genome,
   genomes,
-  onSelectGenome,
   onClose,
 }: Props) {
   if (!genome) return null;
@@ -39,37 +37,30 @@ export function GenomeDetail({
               ? "Crossover Parents"
               : "Inherited Parent"}
           </h3>
-          <div className="config-grid">
+          <div className="parent-grid">
             {genome.parents.map((parentId, index) => {
               const parent = genomes.find((candidate) => candidate.id === parentId);
               return (
-                <button
-                  key={parentId}
-                  className="replay-btn"
-                  onClick={() => onSelectGenome(parentId)}
-                  style={{ textAlign: "left", padding: 12 }}
-                >
+                <div key={parentId} className="parent-card">
                   <strong>
                     {genome.parents.length === 2
                       ? `Parent ${index === 0 ? "A" : "B"}`
                       : "Survivor"}
                   </strong>
-                  <br />
-                  {parentId}
+                  <span className="parent-id">{parentId}</span>
                   {parent && (
-                    <>
-                      <br />
+                    <span className="parent-stats">
                       Gen {parent.generation} · Score {parent.fitness.score.toFixed(3)}
-                    </>
+                    </span>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
           {genome.parents.length === 1 && (
             <div className="mutation-note">
-              This candidate was carried forward unchanged. Open its parent to
-              follow the lineage back to the most recent crossover.
+              This candidate was carried forward unchanged, so no crossover
+              occurred in this generation.
             </div>
           )}
         </>

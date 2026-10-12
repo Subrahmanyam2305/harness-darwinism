@@ -308,6 +308,46 @@ main {
   margin-top: 8px;
 }
 
+.parent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+
+.parent-card {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.parent-card strong,
+.parent-id,
+.parent-stats {
+  display: block;
+}
+
+.parent-card strong {
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.parent-id {
+  overflow-wrap: anywhere;
+  color: var(--accent);
+}
+
+.parent-stats {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Champion banner ─── */
 .champion-banner {
   border-color: rgba(48, 209, 88, 0.3);
