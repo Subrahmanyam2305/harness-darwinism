@@ -39,6 +39,7 @@ class EpisodeTrace:
     latency_seconds: float = 0.0
     error: str | None = None
     harness: dict = field(default_factory=dict)
+    artifact_path: str | None = None
     max_steps: int = 200
     schema_version: int = 1
 

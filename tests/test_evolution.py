@@ -2,7 +2,10 @@
 
 from copy import deepcopy
 
-from src.agent import EpisodeTrace
+import numpy as np
+
+from src.agent import EpisodeFrame, EpisodeTrace
+from src.config import settings
 from src.evolution import evaluate_genome, run_generation, seed_population
 from src.genome import Fitness, Genome, GenomeConfig
 
@@ -23,11 +26,46 @@ def test_agent_error_becomes_zero_fitness_and_keeps_trace(monkeypatch) -> None:
         "src.evolution.play_episode", lambda *args, **kwargs: failed_trace
     )
 
-    fitness, traces = evaluate_genome(genome, [127], max_steps=100)
+    fitness, traces = evaluate_genome(
+        genome, [127], max_steps=100, record_frames=False
+    )
 
     assert fitness.score == 0.0
     assert fitness.mean_steps == 42
     assert traces == [failed_trace]
+
+
+def test_evolution_episode_records_frames_and_gif(monkeypatch, tmp_path) -> None:
+    genome = Genome(id="recorded-candidate")
+
+    def fake_play(genome, seed, max_steps, *, on_frame):
+        on_frame(
+            EpisodeFrame(
+                step=0,
+                action=None,
+                rgb=np.zeros((8, 8, 3), dtype=np.uint8),
+                observation="initial world",
+                achievements={},
+                inventory={},
+                is_stub=False,
+            )
+        )
+        return EpisodeTrace(
+            genome_id=genome.id,
+            seed=seed,
+            score=0.0,
+            achievements={},
+            steps=0,
+        )
+
+    monkeypatch.setattr("src.evolution.play_episode", fake_play)
+    monkeypatch.setattr(settings, "project_root", tmp_path)
+
+    _, traces = evaluate_genome(genome, [127], max_steps=1)
+
+    artifact = tmp_path / traces[0].artifact_path
+    assert (artifact / "frames" / "00000.png").is_file()
+    assert (artifact / "replay.gif").is_file()
 
 
 def test_generation_preserves_lineage_population_and_retries_duplicates(

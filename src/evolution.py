@@ -28,6 +28,7 @@ from src.db import (
 from src.evaluator import summarize_traces
 from src.genome import Fitness, Genome, GenomeConfig
 from src.meta_agent import llm_crossover, llm_mutate
+from src.recording import EpisodeRecorder
 
 console = Console()
 
@@ -76,19 +77,55 @@ def seed_population(n: int = 10, *, experiment_id: str = "default") -> list[Geno
 
 
 def evaluate_genome(
-    genome: Genome, seeds: list[int], *, max_steps: int | None = None
+    genome: Genome,
+    seeds: list[int],
+    *,
+    max_steps: int | None = None,
+    record_frames: bool = True,
 ) -> tuple[Fitness, list[EpisodeTrace]]:
     """Play multiple seeds, return aggregate fitness and traces."""
     traces: list[EpisodeTrace] = []
     for seed in seeds:
         console.print(f"  [dim]Playing seed {seed}...[/dim]", end=" ")
-        trace = play_episode(
-            genome,
-            seed,
-            max_steps=(
-                max_steps if max_steps is not None else settings.max_steps_per_episode
-            ),
-        )
+        recorder = None
+        if record_frames:
+            base = (
+                settings.project_root
+                / "data"
+                / "runs"
+                / "evolution"
+                / genome.id
+                / f"seed-{seed}"
+            )
+            artifact_path = base
+            attempt = 1
+            while artifact_path.exists():
+                attempt += 1
+                artifact_path = base.with_name(f"{base.name}-attempt-{attempt}")
+            recorder = EpisodeRecorder(
+                artifact_path,
+                label=f"Evolution · {genome.id} · seed {seed}",
+            )
+        try:
+            trace = play_episode(
+                genome,
+                seed,
+                max_steps=(
+                    max_steps
+                    if max_steps is not None
+                    else settings.max_steps_per_episode
+                ),
+                on_frame=recorder.on_frame if recorder else None,
+            )
+        except Exception:
+            if recorder:
+                recorder.fail("episode_exception")
+            raise
+        if recorder:
+            trace.artifact_path = str(
+                recorder.path.relative_to(settings.project_root)
+            )
+            recorder.finish(trace)
         traces.append(trace)
         console.print(f"score={trace.score:.1f}, steps={trace.steps}")
 
@@ -112,6 +149,7 @@ def evaluate_genome(
 def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
     """Build the complete Atlas evidence document for one evaluated episode."""
     return {
+        "_id": f"{genome.id}_s{trace.seed}",
         "genome_id": genome.id,
         "generation": generation,
         "seed": trace.seed,
@@ -131,6 +169,7 @@ def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
         "cost_usd": trace.cost_usd,
         "latency_seconds": trace.latency_seconds,
         "harness": trace.harness,
+        "artifact_path": trace.artifact_path,
         "arm": genome.arm,
         "timestamp": datetime.now(UTC),
     }
