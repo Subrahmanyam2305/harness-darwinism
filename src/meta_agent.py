@@ -11,10 +11,13 @@ from src.llm import chat
 
 
 def llm_crossover(
-    parent_a: GenomeConfig, parent_b: GenomeConfig
+    parent_a: GenomeConfig, parent_b: GenomeConfig, *, max_attempts: int = 3
 ) -> tuple[GenomeConfig, str]:
-    """Merge two parent genomes and return the LLM's crossover explanation."""
-    prompt = f"""You are an evolution operator. Merge the best traits of two parent agent configurations into one child.
+    """Merge two parent genomes, retrying invalid structured responses."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+
+    base_prompt = f"""You are an evolution operator. Merge the best traits of two parent agent configurations into one child.
 
 ## Parent A
 System prompt: {parent_a.system_prompt}
@@ -46,22 +49,48 @@ Respond with ONLY a JSON object:
   "crossover_note": "one sentence explaining which traits you kept from each parent and why"
 }}"""
 
-    resp = chat(
-        messages=[{"role": "user", "content": prompt}],
-        model=settings.meta_model,
-        max_tokens=600,
-        temperature=0.7,
-    )
-    try:
+    failures: list[str] = []
+    for attempt in range(1, max_attempts + 1):
+        correction = ""
+        if failures:
+            correction = (
+                "\n\n## Correction\n"
+                f"Your previous response was invalid: {failures[-1]}. "
+                "Return only one complete JSON object matching the required schema."
+            )
+        resp = chat(
+            messages=[{"role": "user", "content": base_prompt + correction}],
+            model=settings.meta_model,
+            max_tokens=600,
+            temperature=0.7,
+        )
         match = re.search(r"\{[\s\S]+\}", resp)
-        if match:
+        if not match:
+            failures.append("no JSON object found")
+            continue
+        try:
             data = json.loads(match.group())
             config = GenomeConfig(**data.get("config", data))
-            note = data.get("crossover_note", "Combined both parent configurations")
-            return config, note
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        pass
-    return parent_a.model_copy(deep=True), "Crossover failed; retained parent A"
+        except json.JSONDecodeError as error:
+            failures.append(f"malformed JSON ({error.msg})")
+            continue
+        except (KeyError, TypeError, ValueError) as error:
+            failures.append(f"invalid genome schema ({error})")
+            continue
+
+        note = data.get("crossover_note", "Combined both parent configurations")
+        if attempt > 1:
+            note = f"{note} Crossover succeeded on attempt {attempt}."
+        return config, note
+
+    failure_summary = "; ".join(failures)
+    return (
+        parent_a.model_copy(deep=True),
+        (
+            f"Crossover failed after {max_attempts} attempts ({failure_summary}); "
+            "retained parent A"
+        ),
+    )
 
 
 def llm_mutate(
