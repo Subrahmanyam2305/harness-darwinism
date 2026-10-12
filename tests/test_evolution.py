@@ -7,6 +7,7 @@ import numpy as np
 from src.agent import EpisodeFrame, EpisodeTrace
 from src.config import settings
 from src.evolution import (
+    _novelty_fallback,
     _resume_seeds,
     evaluate_genome,
     run_generation,
@@ -84,6 +85,28 @@ def test_resume_recovers_seeds_from_metrics_before_latest_generation_runs(
     )
 
     assert _resume_seeds(object(), population, 3, "resumed") == [105]
+
+
+def test_duplicate_llm_mutation_gets_deterministic_novelty_fallback(
+    monkeypatch,
+) -> None:
+    config = GenomeConfig()
+    initial_history = config.context_budget.history_steps
+    added = []
+    monkeypatch.setattr(
+        "src.evolution.ledger_check",
+        lambda db, edit_hash: edit_hash == config.content_hash(),
+    )
+    monkeypatch.setattr(
+        "src.evolution.ledger_add",
+        lambda db, edit_hash, note: added.append((edit_hash, note)),
+    )
+
+    result, note = _novelty_fallback(object(), config, "Repeated strategy.")
+
+    assert result.context_budget.history_steps == initial_history + 1
+    assert "Novelty fallback" in note
+    assert len(added) == 1
 
 
 def test_generation_preserves_lineage_population_and_retries_duplicates(

@@ -242,6 +242,29 @@ def weighted_pairs(
     return pairs
 
 
+def _novelty_fallback(
+    db, config: GenomeConfig, mutation_note: str
+) -> tuple[GenomeConfig, str]:
+    """Create a bounded deterministic variant when LLM mutation keeps converging."""
+    initial_history = config.context_budget.history_steps
+    for offset in range(1, 201):
+        candidate = config.model_copy(deep=True)
+        candidate.context_budget.history_steps = (initial_history + offset) % 201
+        edit_hash = candidate.content_hash()
+        if not ledger_check(db, edit_hash):
+            note = (
+                f"{mutation_note} Novelty fallback adjusted context history from "
+                f"{initial_history} to {candidate.context_budget.history_steps} after "
+                "three duplicate LLM mutations."
+            )
+            ledger_add(db, edit_hash, note)
+            return candidate, note
+    return (
+        config,
+        f"{mutation_note} Duplicate accepted because all context budgets were exhausted.",
+    )
+
+
 # ── One generation ──
 
 
@@ -354,9 +377,10 @@ def run_generation(
                 f"[yellow]duplicate mutation {attempt}/{max_mutation_attempts}[/yellow]"
             )
         else:
-            raise RuntimeError(
-                f"Could not produce a unique child after {max_mutation_attempts} attempts"
+            child_config, mutation_note = _novelty_fallback(
+                db, child_config, mutation_note
             )
+            console.print("[yellow]using deterministic novelty fallback[/yellow]")
 
         child = Genome(
             id=make_id(gen + 1, child_idx, parent_a.arm),
