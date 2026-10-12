@@ -2,10 +2,17 @@ import type { GenomeSummary } from "../api";
 
 interface Props {
   genome: GenomeSummary | null;
+  genomes: GenomeSummary[];
+  onSelectGenome: (id: string) => void;
   onClose: () => void;
 }
 
-export function GenomeDetail({ genome, onClose }: Props) {
+export function GenomeDetail({
+  genome,
+  genomes,
+  onSelectGenome,
+  onClose,
+}: Props) {
   if (!genome) return null;
 
   return (
@@ -23,10 +30,50 @@ export function GenomeDetail({ genome, onClose }: Props) {
         <span>Gen {genome.generation}</span>
         <span>Score: {genome.fitness.score.toFixed(1)}</span>
         <span>Steps: {genome.fitness.mean_steps.toFixed(0)}</span>
-        {genome.parents.length > 0 && (
-          <span>Parents: {genome.parents.join(" × ")}</span>
-        )}
       </div>
+
+      {genome.parents.length > 0 && (
+        <>
+          <h3>
+            {genome.parents.length === 2
+              ? "Crossover Parents"
+              : "Inherited Parent"}
+          </h3>
+          <div className="config-grid">
+            {genome.parents.map((parentId, index) => {
+              const parent = genomes.find((candidate) => candidate.id === parentId);
+              return (
+                <button
+                  key={parentId}
+                  className="replay-btn"
+                  onClick={() => onSelectGenome(parentId)}
+                  style={{ textAlign: "left", padding: 12 }}
+                >
+                  <strong>
+                    {genome.parents.length === 2
+                      ? `Parent ${index === 0 ? "A" : "B"}`
+                      : "Survivor"}
+                  </strong>
+                  <br />
+                  {parentId}
+                  {parent && (
+                    <>
+                      <br />
+                      Gen {parent.generation} · Score {parent.fitness.score.toFixed(3)}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {genome.parents.length === 1 && (
+            <div className="mutation-note">
+              This candidate was carried forward unchanged. Open its parent to
+              follow the lineage back to the most recent crossover.
+            </div>
+          )}
+        </>
+      )}
 
       {genome.selection_note && (
         <div className="mutation-note">
