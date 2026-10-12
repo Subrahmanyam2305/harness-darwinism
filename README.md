@@ -92,6 +92,9 @@ harness-darwinism/
 ├── run.py                  # CLI: evolve | eval | serve | seed
 ├── api.py                  # FastAPI dashboard backend (port 8001)
 ├── .env                    # Credentials (not committed)
+├── docs/stage-2.md         # Evolution on the scripted Crafter body
+├── docs/stage-3.md         # Held-out eval, Hafner score, kite, ablations
+├── docs/stage-4.md         # Camp, craft_iron, survive, measure
 │
 ├── src/
 │   ├── config.py           # Settings from .env
@@ -108,6 +111,7 @@ harness-darwinism/
 │       ├── components/
 │       │   ├── FitnessCurve.tsx      # Best/mean score per generation
 │       │   ├── LineageTree.tsx       # Interactive lineage graph
+│       │   ├── ReplayCard.tsx        # Crafter gameplay replay under the tree
 │       │   ├── AchievementGrid.tsx   # 22-achievement baseline vs champion
 │       │   └── GenomeDetail.tsx      # Inspect any genome's rules
 │       └── hooks/

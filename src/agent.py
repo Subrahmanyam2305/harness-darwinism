@@ -1,20 +1,21 @@
-"""LLM agent that plays Crafter using a genome's harness config."""
+"""Hierarchical Crafter agent: planner picks a goal, macros emit primitives."""
 
 from __future__ import annotations
 
-import json
-import re
+import time
 from dataclasses import dataclass, field
 
 from src.config import settings
-from src.crafter_env import ACTIONS, CrafterTextEnv
+from src.crafter_env import CrafterTextEnv
 from src.genome import Genome
-from src.llm import chat
+from src.planner import choose_goal
+from src.skills import WorldMap, execute_goal
 
 
 @dataclass
 class EpisodeTrace:
     """Record of one episode for the meta-agent to learn from."""
+
     genome_id: str
     seed: int
     score: float
@@ -22,110 +23,127 @@ class EpisodeTrace:
     steps: int
     history: list[dict] = field(default_factory=list)
     failure_summary: str = ""
+    llm_calls: int = 0
+    frames: list[dict] = field(default_factory=list)
 
 
-def _build_system_prompt(genome: Genome) -> str:
-    """Construct the full system prompt from the genome's harness config."""
-    cfg = genome.genome
-    parts = [cfg.system_prompt, ""]
+def _encode_rgb(rgb) -> str:
+    import base64
+    import io
 
-    if cfg.rules:
-        parts.append("## Strategy Rules")
-        for i, rule in enumerate(cfg.rules, 1):
-            parts.append(f"{i}. {rule}")
-        parts.append("")
+    from PIL import Image
 
-    parts.append("## Available Actions")
-    parts.append(", ".join(cfg.tools))
-    parts.append("")
-
-    parts.append("## Response Format")
-    parts.append('Respond with ONLY a JSON object: {"thought": "brief reasoning", "action": "action_name"}')
-    parts.append("The action must be one of the available actions listed above.")
-
-    return "\n".join(parts)
+    image = Image.fromarray(rgb)
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _parse_action(response: str) -> str:
-    """Extract action from LLM response, with fallback."""
-    try:
-        match = re.search(r'\{[^}]+\}', response)
-        if match:
-            data = json.loads(match.group())
-            action = data.get("action", "noop")
-            if action in ACTIONS:
-                return action
-    except (json.JSONDecodeError, KeyError):
-        pass
-
-    for action in ACTIONS:
-        if action in response.lower():
-            return action
-    return "noop"
-
-
-def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrace:
-    """Run one Crafter episode with the given genome's harness."""
+def play_episode(
+    genome: Genome,
+    seed: int,
+    max_steps: int | None = None,
+    record_stride: int = 0,
+) -> EpisodeTrace:
+    """Run one Crafter episode with planner + scripted macros."""
+    max_steps = max_steps if max_steps is not None else settings.max_steps_per_episode
     env = CrafterTextEnv(seed=seed, max_steps=max_steps)
-    system_prompt = _build_system_prompt(genome)
+    if record_stride:
+        env.enable_recording(record_stride)
+    world = WorldMap()
 
-    messages: list[dict] = []
     history: list[dict] = []
-    notes: list[str] = []
+    frames: list[dict] = []
+    state = env.reset()
+    world.update(state)
 
-    obs = env.reset()
+    def flush_frames(goal: str) -> None:
+        if not record_stride:
+            return
+        for step, rgb in env.pop_recorded():
+            frames.append({
+                "step": step,
+                "goal": goal,
+                "vitals": dict(state.vitals),
+                "image": _encode_rgb(rgb),
+            })
 
-    while True:
-        user_parts = [f"Observation:\n{obs}"]
-        if notes:
-            max_notes = genome.genome.memory_policy.max_items
-            user_parts.append("\nYour notes:\n" + "\n".join(f"- {n}" for n in notes[-max_notes:]))
-        user_parts.append(f"\nStep {env.step_count + 1}/{max_steps}. Choose your action.")
+    flush_frames("start")
 
-        user_msg = "\n".join(user_parts)
+    last_goal: str | None = None
+    last_fail = ""
+    repeats = 0
+    llm_calls = 0
+    max_llm = getattr(settings, "max_llm_calls_per_episode", 0)
+    deadline = time.monotonic() + 90.0
 
-        # Trim history to context budget
-        ctx = genome.genome.context_budget.history_steps
-        trimmed = messages[max(0, len(messages) - ctx * 2):]
-        trimmed.append({"role": "user", "content": user_msg})
+    while env.step_count < max_steps:
+        stuck = last_goal if repeats >= 3 else None
+        use_llm = (
+            stuck is not None
+            and settings.planner_mode == "llm"
+            and llm_calls < max_llm
+        )
+        if use_llm:
+            llm_calls += 1
+        goal = choose_goal(state, world, genome, stuck_goal=stuck if use_llm else None)
+        if repeats >= 3 and goal not in {"explore", "flee", "sleep_safe"}:
+            at_camp = bool(world.camp) and max(
+                abs(state.x - world.camp[0]), abs(state.y - world.camp[1])
+            ) <= 2
+            if world.camp and not at_camp:
+                goal = "retreat_to_camp"
+            elif goal == "retreat_to_camp":
+                goal = "sleep_safe" if state.is_night else "explore"
+            else:
+                goal = "explore"
+            repeats = 0
+        if goal == last_goal:
+            repeats += 1
+        else:
+            repeats = 0
+        last_goal = goal
 
-        try:
-            reply = chat(
-                messages=trimmed,
-                system=system_prompt,
-                model=settings.agent_model,
-                max_tokens=150,
-                temperature=0.3,
-            )
-        except Exception as e:
-            reply = '{"action": "noop"}'
-            history.append({"step": env.step_count, "error": str(e)})
-
-        action = _parse_action(reply)
-
-        messages.append({"role": "user", "content": user_msg})
-        messages.append({"role": "assistant", "content": reply})
-
-        obs, reward, done, info = env.step(action)
+        pair = True
+        if genome is not None:
+            pair = genome.genome.planner.pair_stations
+        result = execute_goal(env, state, world, goal, pair_stations=pair)
+        if result.state is not None:
+            state = result.state
+        last_fail = result.reason
 
         history.append({
             "step": env.step_count,
-            "action": action,
-            "reward": reward,
-            "obs_snippet": obs[:200],
+            "goal": goal,
+            "ok": result.ok,
+            "reason": result.reason,
+            "primitives": result.actions,
+            "n_primitives": result.steps,
+            "reward": result.reward,
+            "vitals": dict(state.vitals),
+            "pos": state.pos,
         })
 
-        if reward > 0:
-            notes.append(f"Step {env.step_count}: got reward {reward} from {action}")
-        if "health=1" in obs or "health=2" in obs:
-            notes.append(f"Step {env.step_count}: critically low health!")
+        flush_frames(goal)
 
-        if done:
+        if result.done or state.vitals.get("health", 0) <= 0:
+            break
+
+        if repeats >= 6 and goal == "explore":
+            # One more explore cycle already ran; stop spinning if the map is exhausted.
+            if result.steps == 0:
+                break
+        if repeats >= 12:
+            break
+        if time.monotonic() > deadline:
+            last_fail = (last_fail or "") + " episode wall-clock timeout"
             break
 
     score = env.get_score()
     achievements = env.get_achievements()
-    failure_summary = _summarize_failure(history, achievements, env.step_count, max_steps)
+    failure_summary = _summarize_failure(
+        history, achievements, env.step_count, max_steps, last_goal, last_fail, state
+    )
 
     return EpisodeTrace(
         genome_id=genome.id,
@@ -135,6 +153,8 @@ def play_episode(genome: Genome, seed: int, max_steps: int = 200) -> EpisodeTrac
         steps=env.step_count,
         history=history,
         failure_summary=failure_summary,
+        llm_calls=llm_calls,
+        frames=frames,
     )
 
 
@@ -143,24 +163,37 @@ def _summarize_failure(
     achievements: dict[str, bool],
     steps: int,
     max_steps: int,
+    last_goal: str | None,
+    last_fail: str,
+    state,
 ) -> str:
-    """Quick text summary of what went wrong."""
     unlocked = [k for k, v in achievements.items() if v]
     missed = [k for k, v in achievements.items() if not v]
 
     lines = [f"Survived {steps}/{max_steps} steps."]
     lines.append(f"Unlocked: {', '.join(unlocked) if unlocked else 'none'}")
-    lines.append(f"Missed: {', '.join(missed[:5])}{'...' if len(missed) > 5 else ''}")
+    lines.append(f"Missed: {', '.join(missed[:8])}{'...' if len(missed) > 8 else ''}")
+    if last_goal:
+        lines.append(f"Last goal: {last_goal} ({last_fail})")
+    lines.append(
+        f"Vitals: health={state.vitals.get('health')} food={state.vitals.get('food')} "
+        f"drink={state.vitals.get('drink')} energy={state.vitals.get('energy')}"
+    )
 
-    if steps < max_steps:
-        death_step = history[-1] if history else {}
-        lines.append(f"Died at step {steps}. Last action: {death_step.get('action', '?')}")
+    if steps < max_steps and state.vitals.get("health", 0) <= 0:
+        last = history[-1] if history else {}
+        lines.append(f"Died at step {steps}. Last goal: {last.get('goal', '?')}")
 
-    action_counts: dict[str, int] = {}
+    goals: dict[str, int] = {}
+    fails: dict[str, int] = {}
     for h in history:
-        a = h.get("action", "?")
-        action_counts[a] = action_counts.get(a, 0) + 1
-    top_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:5]
-    lines.append(f"Most used actions: {', '.join(f'{a}({n})' for a, n in top_actions)}")
-
+        g = h.get("goal", "?")
+        goals[g] = goals.get(g, 0) + 1
+        if not h.get("ok"):
+            fails[g] = fails.get(g, 0) + 1
+    top = sorted(goals.items(), key=lambda x: -x[1])[:6]
+    lines.append("Goals: " + ", ".join(f"{g}({n})" for g, n in top))
+    if fails:
+        top_f = sorted(fails.items(), key=lambda x: -x[1])[:4]
+        lines.append("Failed goals: " + ", ".join(f"{g}({n})" for g, n in top_f))
     return "\n".join(lines)

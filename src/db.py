@@ -24,8 +24,13 @@ def _check_mongo():
         _use_mongo = False
         return False
     try:
+        import certifi
         from pymongo import MongoClient
-        client = MongoClient(settings.mongodb_uri, serverSelectionTimeoutMS=3000)
+        client = MongoClient(
+            settings.mongodb_uri,
+            serverSelectionTimeoutMS=8000,
+            tlsCAFile=certifi.where(),
+        )
         client.server_info()
         _db = client[settings.db_name]
         _use_mongo = True

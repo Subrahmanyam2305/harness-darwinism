@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class Settings(BaseSettings):
@@ -20,8 +23,11 @@ class Settings(BaseSettings):
     survivors: int = 5
     seeds_per_gen: int = 5
     max_generations: int = 10
-    max_steps_per_episode: int = 200
-    archive_sample_ratio: float = 0.1
+    max_steps_per_episode: int = 2000
+    max_llm_calls_per_episode: int = 40
+    planner_mode: str = "scripted"
+    meta_mode: str = "llm"
+    archive_sample_ratio: float = 0.2
 
     # Crafter
     crafter_size: tuple[int, int] = (64, 64)
@@ -29,7 +35,11 @@ class Settings(BaseSettings):
     # Paths
     project_root: Path = Path(__file__).resolve().parent.parent
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

@@ -18,21 +18,27 @@ export function useEvolutionData(pollInterval = 5000) {
   }>({ baseline: {}, champion: {} });
   const [genomes, setGenomes] = useState<GenomeSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const signal = AbortSignal.timeout(8000);
     try {
       const [m, t, a, g] = await Promise.all([
-        fetchMetrics(),
-        fetchTree(),
-        fetchAchievements(),
-        fetchGenomes(),
+        fetchMetrics("full", signal),
+        fetchTree("full", signal),
+        fetchAchievements("full", signal),
+        fetchGenomes(undefined, signal),
       ]);
-      setMetrics(m);
-      setTree(t);
-      setAchievements(a);
-      setGenomes(g);
+      setMetrics(Array.isArray(m) ? m : []);
+      setTree(t?.nodes ? t : { nodes: [], edges: [] });
+      setAchievements(a ?? { baseline: {}, champion: {} });
+      setGenomes(Array.isArray(g) ? g : []);
+      setError(null);
     } catch (e) {
       console.error("Failed to fetch data:", e);
+      setError(
+        "Cannot reach the dashboard API on port 8001. Start it with python run.py serve."
+      );
     } finally {
       setLoading(false);
     }
@@ -44,5 +50,5 @@ export function useEvolutionData(pollInterval = 5000) {
     return () => clearInterval(interval);
   }, [refresh, pollInterval]);
 
-  return { metrics, tree, achievements, genomes, loading, refresh };
+  return { metrics, tree, achievements, genomes, loading, error, refresh };
 }

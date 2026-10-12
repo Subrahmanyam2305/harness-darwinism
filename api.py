@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -85,6 +87,50 @@ def lineage_tree(arm: str = "full"):
             edges.append({"source": parent_id, "target": g.id})
 
     return {"nodes": nodes, "edges": edges}
+
+
+def _run_replay(seed: int, steps: int, stride: int, genome_id: str | None) -> dict:
+    from src.agent import play_episode
+    from src.db import get_genome
+    from src.genome import Genome, GenomeConfig
+
+    if genome_id:
+        genome = get_genome(get_db(), genome_id)
+        if not genome:
+            return {"error": f"genome {genome_id} not found"}
+    else:
+        genome = Genome(id="play_default", genome=GenomeConfig())
+
+    trace = play_episode(genome, seed, max_steps=steps, record_stride=stride)
+    unlocked = [k for k, v in trace.achievements.items() if v]
+    return {
+        "label": "scripted replay — separate from evolve scores",
+        "genome_id": genome.id,
+        "seed": seed,
+        "steps": trace.steps,
+        "score": trace.score,
+        "unlocks": unlocked,
+        "frames": trace.frames,
+    }
+
+
+@app.get("/api/replay")
+async def replay(
+    seed: int = 102,
+    steps: int = 160,
+    stride: int = 5,
+    genome_id: str | None = None,
+):
+    """Play a short labeled replay off the event loop so /api/health stays up."""
+    steps = max(50, min(int(steps), 400))
+    stride = max(2, min(int(stride), 16))
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_run_replay, seed, steps, stride, genome_id),
+            timeout=40,
+        )
+    except TimeoutError:
+        return {"error": "replay timed out; try a smaller step budget"}
 
 
 @app.get("/api/achievements")

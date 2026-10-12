@@ -1,17 +1,21 @@
 import { useCallback, useMemo } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   type Node,
   type Edge,
+  type NodeProps,
   Position,
+  Handle,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { TreeData } from "../api";
 
 interface Props {
   data: TreeData;
+  selectedId?: string | null;
   onSelectGenome?: (id: string) => void;
 }
 
@@ -21,7 +25,44 @@ const STATUS_COLORS: Record<string, string> = {
   champion: "#00d4aa",
 };
 
-export function LineageTree({ data, onSelectGenome }: Props) {
+type GenomeNodeData = {
+  label: string;
+  score: number;
+  rulesCount: number;
+  status: string;
+  selected: boolean;
+  onSelect: () => void;
+};
+
+function GenomeNode({ data }: NodeProps) {
+  const node = data as GenomeNodeData;
+  return (
+    <button
+      type="button"
+      className={`genome-node${node.selected ? " selected" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        node.onSelect();
+      }}
+      style={{
+        background: STATUS_COLORS[node.status] || "#444",
+        borderColor:
+          node.selected ? "#fff" : node.status === "champion" ? "#00d4aa" : "#555",
+      }}
+    >
+      <Handle type="target" position={Position.Top} />
+      <strong>{node.label}</strong>
+      <span>score: {node.score.toFixed(1)}</span>
+      <span>{node.rulesCount} rules</span>
+      {node.status === "champion" && <span>🏆</span>}
+      <Handle type="source" position={Position.Bottom} />
+    </button>
+  );
+}
+
+const nodeTypes = { genome: GenomeNode };
+
+function LineageFlow({ data, selectedId, onSelectGenome }: Props) {
   const { nodes, edges } = useMemo(() => {
     const genGroups: Record<number, typeof data.nodes> = {};
     for (const n of data.nodes) {
@@ -35,30 +76,23 @@ export function LineageTree({ data, onSelectGenome }: Props) {
 
       return {
         id: n.id,
+        type: "genome",
         position: {
           x: (idx - total / 2) * 160 + 400,
           y: n.generation * 180 + 50,
         },
         data: {
-          label: (
-            <div style={{ textAlign: "center", fontSize: 11 }}>
-              <div style={{ fontWeight: 700 }}>{n.id}</div>
-              <div>score: {n.score.toFixed(1)}</div>
-              <div>{n.rules_count} rules</div>
-              {n.status === "champion" && <div>🏆</div>}
-            </div>
-          ),
+          label: n.id,
+          score: n.score,
+          rulesCount: n.rules_count,
+          status: n.status,
+          selected: n.id === selectedId,
+          onSelect: () => onSelectGenome?.(n.id),
         },
         sourcePosition: Position.Bottom,
         targetPosition: Position.Top,
-        style: {
-          background: STATUS_COLORS[n.status] || "#444",
-          color: "#fff",
-          border: n.status === "champion" ? "2px solid #00d4aa" : "1px solid #555",
-          borderRadius: 8,
-          padding: "6px 10px",
-          width: 120,
-        },
+        draggable: false,
+        connectable: false,
       };
     });
 
@@ -67,17 +101,39 @@ export function LineageTree({ data, onSelectGenome }: Props) {
       source: e.source,
       target: e.target,
       style: { stroke: "#555" },
-      animated: false,
     }));
 
     return { nodes: rfNodes, edges: rfEdges };
-  }, [data]);
+  }, [data, selectedId, onSelectGenome]);
 
   const onNodeClick = useCallback(
-    (_: any, node: Node) => onSelectGenome?.(node.id),
+    (_event: unknown, node: Node) => {
+      onSelectGenome?.(node.id);
+    },
     [onSelectGenome]
   );
 
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      onNodeClick={onNodeClick}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable
+      selectNodesOnDrag={false}
+      fitView
+      minZoom={0.3}
+      proOptions={{ hideAttribution: true }}
+    >
+      <Background color="#333" gap={20} />
+      <Controls />
+    </ReactFlow>
+  );
+}
+
+export function LineageTree({ data, selectedId, onSelectGenome }: Props) {
   if (!data.nodes.length) {
     return (
       <div className="panel empty">
@@ -87,19 +143,17 @@ export function LineageTree({ data, onSelectGenome }: Props) {
   }
 
   return (
-    <div className="panel" style={{ height: 500 }}>
+    <div className="panel lineage-panel">
       <h2>🌳 Lineage Tree</h2>
-      <div style={{ height: "calc(100% - 40px)" }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodeClick={onNodeClick}
-          fitView
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background color="#333" gap={20} />
-          <Controls />
-        </ReactFlow>
+      <p className="lineage-hint">Click a genome to inspect its rules and score.</p>
+      <div className="lineage-canvas">
+        <ReactFlowProvider>
+          <LineageFlow
+            data={data}
+            selectedId={selectedId}
+            onSelectGenome={onSelectGenome}
+          />
+        </ReactFlowProvider>
       </div>
     </div>
   );
