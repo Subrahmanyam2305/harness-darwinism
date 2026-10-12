@@ -18,6 +18,7 @@ from src.db import (
     get_archive,
     get_db,
     get_failure_traces,
+    get_metrics,
     get_runs_for_genome,
     insert_run,
     ledger_add,
@@ -173,6 +174,25 @@ def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
         "arm": genome.arm,
         "timestamp": datetime.now(UTC),
     }
+
+
+def _resume_seeds(
+    db, population: list[Genome], generation: int, experiment_id: str
+) -> list[int]:
+    """Recover fixed experiment seeds even when the latest generation has no runs."""
+    current_seeds = {
+        run.get("seed")
+        for genome in population
+        for run in get_runs_for_genome(db, genome.id)
+        if run.get("generation") == generation and run.get("seed") is not None
+    }
+    if current_seeds:
+        return sorted(current_seeds)
+    for metric in reversed(get_metrics(db, arm=experiment_id)):
+        metric_seeds = metric.get("seeds") or []
+        if metric_seeds:
+            return sorted(set(metric_seeds))
+    return []
 
 
 # ── Selection ──
@@ -486,19 +506,15 @@ def run_evolution(
                 f"Stored generation {start_generation} has {len(population)} genomes, "
                 f"expected {target_size}"
             )
-        stored_seeds = {
-            run.get("seed")
-            for genome in population
-            for run in get_runs_for_genome(db, genome.id)
-            if run.get("generation") == start_generation
-            and run.get("seed") is not None
-        }
+        stored_seeds = _resume_seeds(
+            db, population, start_generation, experiment_id
+        )
         if len(stored_seeds) != seed_count:
             raise ValueError(
                 f"Stored run evidence has seeds {sorted(stored_seeds)}, "
                 f"expected {seed_count} shared seed(s)"
             )
-        shared_seeds = sorted(stored_seeds)
+        shared_seeds = stored_seeds
     else:
         start_generation = 0
         shared_seeds = random.sample(all_train_seeds, seed_count)

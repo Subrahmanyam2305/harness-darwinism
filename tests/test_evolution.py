@@ -6,7 +6,12 @@ import numpy as np
 
 from src.agent import EpisodeFrame, EpisodeTrace
 from src.config import settings
-from src.evolution import evaluate_genome, run_generation, seed_population
+from src.evolution import (
+    _resume_seeds,
+    evaluate_genome,
+    run_generation,
+    seed_population,
+)
 from src.genome import Fitness, Genome, GenomeConfig
 
 
@@ -66,6 +71,19 @@ def test_evolution_episode_records_frames_and_gif(monkeypatch, tmp_path) -> None
     artifact = tmp_path / traces[0].artifact_path
     assert (artifact / "frames" / "00000.png").is_file()
     assert (artifact / "replay.gif").is_file()
+
+
+def test_resume_recovers_seeds_from_metrics_before_latest_generation_runs(
+    monkeypatch,
+) -> None:
+    population = seed_population(2, experiment_id="resumed")
+    monkeypatch.setattr("src.evolution.get_runs_for_genome", lambda db, genome_id: [])
+    monkeypatch.setattr(
+        "src.evolution.get_metrics",
+        lambda db, arm: [{"generation": 2, "arm": arm, "seeds": [105]}],
+    )
+
+    assert _resume_seeds(object(), population, 3, "resumed") == [105]
 
 
 def test_generation_preserves_lineage_population_and_retries_duplicates(
