@@ -79,9 +79,9 @@ The meta-agent receives two selected genomes. It produces a typed child configur
 
 The meta-agent then reads failure summaries from the two parents. Each summary contains the termination reason, step count, and unlocked achievements. It proposes one targeted mutation.
 
-MongoDB stores every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash. This record makes the search resumable and keeps its lineage visible.
+The system records every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash. This evidence makes the search resumable and keeps its lineage visible.
 
-![System architecture for selection, crossover, mutation, Crafter evaluation, and MongoDB persistence.](assets/architecture.png)
+![System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.](assets/architecture.png)
 
 ### 3.3 Initialization
 
@@ -113,11 +113,11 @@ Each survivor was copied into the next generation. This elitism step protected s
 
 Parent pairs were sampled with fitness-based weights. The system could also select an archived genome with a small probability to restore diversity.
 
-Claude Opus 4.6 merged complementary rules, memory settings, and context budgets. The output had to match the genome schema. Invalid output was retried up to three times.
+The meta-agent merged complementary rules, memory settings, and context budgets. The output had to match the genome schema. Invalid output was retried up to three times.
 
 ### 3.7 Mutation
 
-After crossover, Opus read failure summaries from both parents. It added, removed, or changed one rule. It could also adjust the memory policy or context budget.
+After crossover, the meta-agent read failure summaries from both parents. It added, removed, or changed one rule. It could also adjust the memory policy or context budget.
 
 A global ledger stored the hash of every tried configuration. Duplicate mutations were retried three times. A deterministic context-budget change acted as the final novelty fallback.
 
@@ -237,7 +237,7 @@ Our run used one training world and at most 200 actions per episode. Its purpose
 
 ## 6. Conclusion
 
-Harness Darwinism turned an agent harness into a searchable genome. Selection kept stronger policies. Crossover combined parents. Mutation used failure evidence. Atlas stored the complete history.
+Harness Darwinism turned an agent harness into a searchable genome. Selection kept stronger policies. Crossover combined parents. Mutation used failure evidence. The system stored the complete history.
 
 At a fixed 85-action budget, best fitness improved by 41.1% and mean fitness improved by 44.2%. The longer 200-action phase reached 5.606 and improved mean fitness by 70.6% across three generations.
 

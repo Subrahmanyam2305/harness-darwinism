@@ -153,7 +153,7 @@ def build_architecture() -> None:
         draw,
         (955, 175, 1190, 315),
         "4  CROSSOVER",
-        ["Merge two parents", "Claude Opus 4.6"],
+        ["Merge two parents", "Meta-agent operator"],
         accent=RED,
     )
     box(
@@ -176,7 +176,7 @@ def build_architecture() -> None:
         draw,
         (365, 405, 600, 545),
         "FIXED PLAYER",
-        ["Claude Haiku 4.5", "One validated action/step"],
+        ["Gameplay model", "One validated action/step"],
         accent=TEAL,
         fill="#edf6f4",
     )
@@ -197,12 +197,12 @@ def build_architecture() -> None:
     box(
         draw,
         (70, 655, 520, 830),
-        "MONGODB ATLAS  ·  EXPERIMENT MEMORY",
+        "EXPERIMENT EVIDENCE",
         [
-            "harnesses  · genomes, parents, notes",
-            "runs       · scores, achievements, traces",
-            "metrics    · best and mean fitness",
-            "ledger     · configuration hashes",
+            "Genomes and parent links",
+            "Scores, achievements, and traces",
+            "Best and mean fitness",
+            "Previously tried configurations",
         ],
         accent=RED,
         fill="#fbf0ee",
@@ -291,7 +291,7 @@ def drawio_xml() -> str:
         ),
         (
             "cross",
-            "4  CROSSOVER<br>Merge two parents<br>Claude Opus 4.6",
+            "4  CROSSOVER<br>Merge two parents<br>Meta-agent operator",
             955,
             175,
             235,
@@ -309,7 +309,7 @@ def drawio_xml() -> str:
         ),
         (
             "player",
-            "FIXED PLAYER<br>Claude Haiku 4.5<br>One validated action/step",
+            "FIXED PLAYER<br>Gameplay model<br>One validated action/step",
             365,
             405,
             235,
@@ -327,7 +327,7 @@ def drawio_xml() -> str:
         ),
         (
             "atlas",
-            "MONGODB ATLAS<br>harnesses · runs · metrics · ledger",
+            "EXPERIMENT EVIDENCE<br>Genomes · runs · metrics · tried configurations",
             70,
             655,
             450,

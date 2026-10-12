@@ -99,8 +99,8 @@
 <p>The gameplay model receives this genome with the current observation. It returns one validated Crafter action. The model and its sampling settings remain fixed across candidates.</p>
 <p>The meta-agent receives two selected genomes. It produces a typed child configuration and a note that explains which traits it retained.</p>
 <p>The meta-agent then reads failure summaries from the two parents. Each summary contains the termination reason, step count, and unlocked achievements. It proposes one targeted mutation.</p>
-<p>MongoDB stores every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash. This record makes the search resumable and keeps its lineage visible.</p>
-<figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and MongoDB persistence." loading="lazy"><figcaption>System architecture for selection, crossover, mutation, Crafter evaluation, and MongoDB persistence.</figcaption></figure>
+<p>The system records every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash. This evidence makes the search resumable and keeps its lineage visible.</p>
+<figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence." loading="lazy"><figcaption>System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.</figcaption></figure>
 <h3>3.3 Initialization</h3>
 <p>Generation 0 used ten hand-written starter rules. They covered resource collection, tool crafting, health, water, sleep, combat, and furnace construction.</p>
 <p>Each initial genome received a random subset of one to five rules. This created ten different harnesses without asking the meta-agent to design the first population.</p>
@@ -115,9 +115,9 @@
 <p>Each survivor was copied into the next generation. This elitism step protected strong genomes from poor children. It also explains why some nodes in the lineage have one parent and no crossover.</p>
 <h3>3.6 Crossover</h3>
 <p>Parent pairs were sampled with fitness-based weights. The system could also select an archived genome with a small probability to restore diversity.</p>
-<p>Claude Opus 4.6 merged complementary rules, memory settings, and context budgets. The output had to match the genome schema. Invalid output was retried up to three times.</p>
+<p>The meta-agent merged complementary rules, memory settings, and context budgets. The output had to match the genome schema. Invalid output was retried up to three times.</p>
 <h3>3.7 Mutation</h3>
-<p>After crossover, Opus read failure summaries from both parents. It added, removed, or changed one rule. It could also adjust the memory policy or context budget.</p>
+<p>After crossover, the meta-agent read failure summaries from both parents. It added, removed, or changed one rule. It could also adjust the memory policy or context budget.</p>
 <p>A global ledger stored the hash of every tried configuration. Duplicate mutations were retried three times. A deterministic context-budget change acted as the final novelty fallback.</p>
 <p>Five elite copies and five children formed the next population. The active population therefore remained fixed at ten.</p>
 <h2 id="4-experiments">4. Experiments</h2>
@@ -168,7 +168,7 @@
 <p>Our score of 5.606 is much lower. It is also not directly comparable. Published results use different observations, training budgets, policies, and many evaluation episodes.</p>
 <p>Our run used one training world and at most 200 actions per episode. Its purpose was to test harness evolution, lineage, and replay, rather than establish a Crafter benchmark result.</p>
 <h2 id="6-conclusion">6. Conclusion</h2>
-<p>Harness Darwinism turned an agent harness into a searchable genome. Selection kept stronger policies. Crossover combined parents. Mutation used failure evidence. Atlas stored the complete history.</p>
+<p>Harness Darwinism turned an agent harness into a searchable genome. Selection kept stronger policies. Crossover combined parents. Mutation used failure evidence. The system stored the complete history.</p>
 <p>At a fixed 85-action budget, best fitness improved by 41.1% and mean fitness improved by 44.2%. The longer 200-action phase reached 5.606 and improved mean fitness by 70.6% across three generations.</p>
 <p>The experiment had three main limits. It used one training world. It changed the action budget after Generation 4. It did not run a paired evaluation on unseen worlds.</p>
 <p>API usage was another constraint. One 200-action episode could send more than two million input tokens because each action repeated recent history. Larger context genes increased both capability and cost.</p>
