@@ -1,6 +1,6 @@
 # Harness Darwinism: What Happened When We Let Agent Rules Evolve
 
-**Subrahmanyam Arunachalam**
+**Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam**
 
 During a hackathon, our team of three built a system called Harness Darwinism. The idea came from genetic algorithms. We started with a population of agent configurations. We evaluated them, kept the stronger configurations, and used them to create the next generation.
 
