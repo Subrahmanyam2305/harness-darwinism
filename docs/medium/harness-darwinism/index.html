@@ -166,7 +166,7 @@
 <p>Within the 200-action phase, best score remained 5.606. Mean score rose from 1.606 in Generation 5 to 2.740 in Generation 7. This was a 70.6% increase in population mean.</p>
 <p>The later generations improved population quality even though they did not find a better champion.</p>
 <h3>5.2 Lineage</h3>
-<section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage</h3><p>Click any connection to inspect its parents, crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a parent-to-child connection.</p></aside></div></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
+<section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage</h3><p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a parent-to-child connection.</p></aside></div></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
 <p>The lineage contains 80 evaluated harnesses. Pale edges show all parent links. The red path shows the ancestors that led to the final champion.</p>
 <p>Single-parent edges are elite copies. Two-parent edges are crossover children. This distinction prevents an inherited survivor from being described as a new crossover.</p>
 <p>Candidate <code>g2_00</code> is one clear crossover example. Its parents scored 1.314 and 0.876. One parent had concise survival rules. The other had a detailed technology plan.</p>
@@ -222,7 +222,7 @@
   const byId = new Map(records.map((record) => [record.id, record]));
   const positions = new Map();
   const svgNamespace = "http://www.w3.org/2000/svg";
-  let selectedEdge = null;
+  const selectedEdges = new Set();
 
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(svgNamespace, tag);
@@ -302,26 +302,34 @@
     }
   }
 
-  function showConnection(parentId, childId, edgeGroup) {
+  function showConnection(parentId, childId) {
     const child = byId.get(childId);
     if (!child) return;
 
-    if (selectedEdge) {
+    for (const selectedEdge of selectedEdges) {
       const oldLine = selectedEdge.querySelector(".edge-visible");
       oldLine.setAttribute("stroke", "#d8d0c7");
       oldLine.setAttribute("stroke-width", "1.5");
     }
-    selectedEdge = edgeGroup;
-    const activeLine = edgeGroup.querySelector(".edge-visible");
-    activeLine.setAttribute("stroke", "#8b1e1e");
-    activeLine.setAttribute("stroke-width", "4");
+    selectedEdges.clear();
+    for (const candidate of edgeLayer.children) {
+      if (candidate.dataset.child !== childId) continue;
+      selectedEdges.add(candidate);
+      const activeLine = candidate.querySelector(".edge-visible");
+      activeLine.setAttribute("stroke", "#8b1e1e");
+      activeLine.setAttribute("stroke-width", "4");
+    }
 
     detail.replaceChildren();
     detail.appendChild(htmlElement("h3", "", child.id));
     const operation = child.parents.length > 1 ? "Crossover + mutation" : "Elite carry-forward";
     detail.appendChild(htmlElement("span", "detail-badge", operation));
     detail.appendChild(
-      htmlElement("p", "", `${parentId} → ${child.id} · resulting score ${child.score.toFixed(3)}`),
+      htmlElement(
+        "p",
+        "",
+        `${child.parents.join(" + ")} → ${child.id} · resulting score ${child.score.toFixed(3)}`,
+      ),
     );
     appendSection("Selection", child.selection_note);
     appendParents(child, parentId);
@@ -403,16 +411,16 @@
       });
       group.append(visible, target);
       group.addEventListener("mouseenter", () => {
-        if (group !== selectedEdge) visible.setAttribute("stroke", "#1f5f68");
+        if (!selectedEdges.has(group)) visible.setAttribute("stroke", "#1f5f68");
       });
       group.addEventListener("mouseleave", () => {
-        if (group !== selectedEdge) visible.setAttribute("stroke", "#d8d0c7");
+        if (!selectedEdges.has(group)) visible.setAttribute("stroke", "#d8d0c7");
       });
-      group.addEventListener("click", () => showConnection(parentId, child.id, group));
+      group.addEventListener("click", () => showConnection(parentId, child.id));
       group.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          showConnection(parentId, child.id, group);
+          showConnection(parentId, child.id);
         }
       });
       edgeLayer.appendChild(group);
@@ -444,12 +452,7 @@
     });
     group.addEventListener("click", () => {
       if (record.parents.length) {
-        const edge = [...edgeLayer.children].find(
-          (candidate) =>
-            candidate.dataset.parent === record.parents[0] &&
-            candidate.dataset.child === record.id,
-        );
-        showConnection(record.parents[0], record.id, edge);
+        showConnection(record.parents[0], record.id);
       } else {
         showInitial(record);
       }
@@ -471,7 +474,7 @@
       candidate.dataset.parent === initialParent &&
       candidate.dataset.child === initialChild,
   );
-  if (initialEdge) showConnection(initialParent, initialChild, initialEdge);
+  if (initialEdge) showConnection(initialParent, initialChild);
   if (parameters.has("child") || parameters.has("parent")) {
     window.setTimeout(() => {
       document.getElementById("lineage-title").scrollIntoView({ block: "start" });

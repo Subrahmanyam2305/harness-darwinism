@@ -8,7 +8,7 @@
   const byId = new Map(records.map((record) => [record.id, record]));
   const positions = new Map();
   const svgNamespace = "http://www.w3.org/2000/svg";
-  let selectedEdge = null;
+  const selectedEdges = new Set();
 
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(svgNamespace, tag);
@@ -88,26 +88,34 @@
     }
   }
 
-  function showConnection(parentId, childId, edgeGroup) {
+  function showConnection(parentId, childId) {
     const child = byId.get(childId);
     if (!child) return;
 
-    if (selectedEdge) {
+    for (const selectedEdge of selectedEdges) {
       const oldLine = selectedEdge.querySelector(".edge-visible");
       oldLine.setAttribute("stroke", "#d8d0c7");
       oldLine.setAttribute("stroke-width", "1.5");
     }
-    selectedEdge = edgeGroup;
-    const activeLine = edgeGroup.querySelector(".edge-visible");
-    activeLine.setAttribute("stroke", "#8b1e1e");
-    activeLine.setAttribute("stroke-width", "4");
+    selectedEdges.clear();
+    for (const candidate of edgeLayer.children) {
+      if (candidate.dataset.child !== childId) continue;
+      selectedEdges.add(candidate);
+      const activeLine = candidate.querySelector(".edge-visible");
+      activeLine.setAttribute("stroke", "#8b1e1e");
+      activeLine.setAttribute("stroke-width", "4");
+    }
 
     detail.replaceChildren();
     detail.appendChild(htmlElement("h3", "", child.id));
     const operation = child.parents.length > 1 ? "Crossover + mutation" : "Elite carry-forward";
     detail.appendChild(htmlElement("span", "detail-badge", operation));
     detail.appendChild(
-      htmlElement("p", "", `${parentId} → ${child.id} · resulting score ${child.score.toFixed(3)}`),
+      htmlElement(
+        "p",
+        "",
+        `${child.parents.join(" + ")} → ${child.id} · resulting score ${child.score.toFixed(3)}`,
+      ),
     );
     appendSection("Selection", child.selection_note);
     appendParents(child, parentId);
@@ -189,16 +197,16 @@
       });
       group.append(visible, target);
       group.addEventListener("mouseenter", () => {
-        if (group !== selectedEdge) visible.setAttribute("stroke", "#1f5f68");
+        if (!selectedEdges.has(group)) visible.setAttribute("stroke", "#1f5f68");
       });
       group.addEventListener("mouseleave", () => {
-        if (group !== selectedEdge) visible.setAttribute("stroke", "#d8d0c7");
+        if (!selectedEdges.has(group)) visible.setAttribute("stroke", "#d8d0c7");
       });
-      group.addEventListener("click", () => showConnection(parentId, child.id, group));
+      group.addEventListener("click", () => showConnection(parentId, child.id));
       group.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          showConnection(parentId, child.id, group);
+          showConnection(parentId, child.id);
         }
       });
       edgeLayer.appendChild(group);
@@ -230,12 +238,7 @@
     });
     group.addEventListener("click", () => {
       if (record.parents.length) {
-        const edge = [...edgeLayer.children].find(
-          (candidate) =>
-            candidate.dataset.parent === record.parents[0] &&
-            candidate.dataset.child === record.id,
-        );
-        showConnection(record.parents[0], record.id, edge);
+        showConnection(record.parents[0], record.id);
       } else {
         showInitial(record);
       }
@@ -257,7 +260,7 @@
       candidate.dataset.parent === initialParent &&
       candidate.dataset.child === initialChild,
   );
-  if (initialEdge) showConnection(initialParent, initialChild, initialEdge);
+  if (initialEdge) showConnection(initialParent, initialChild);
   if (parameters.has("child") || parameters.has("parent")) {
     window.setTimeout(() => {
       document.getElementById("lineage-title").scrollIntoView({ block: "start" });

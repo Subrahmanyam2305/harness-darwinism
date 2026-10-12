@@ -103,7 +103,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
                     '<section class="lineage-explorer" aria-labelledby="lineage-title">'
                     '<div class="lineage-heading">'
                     '<h3 id="lineage-title">Interactive lineage</h3>'
-                    "<p>Click any connection to inspect its parents, crossover output, mutation, and final child genome.</p>"
+                    "<p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p>"
                     "</div>"
                     '<div class="lineage-layout">'
                     '<div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" '
