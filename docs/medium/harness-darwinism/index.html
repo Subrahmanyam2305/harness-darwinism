@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A technical account of evolving an LLM agent harness with selection, crossover, mutation, Crafter, and MongoDB Atlas.">
+  <title>Harness Darwinism: What Happened When We Let Agent Rules Evolve</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --paper:#fffdf9; --ink:#211d19; --muted:#6b6258; --accent:#8b1e1e; --teal:#1f5f68; --rule:#ddd4ca; --soft:#f3eee7; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:#eee9e2; color:var(--ink); font-family:"Libre Baskerville", Georgia, serif; font-size:16px; line-height:1.75; }
+    .progress { position:fixed; z-index:10; top:0; left:0; width:0; height:3px; background:var(--accent); }
+    .paper { width:min(900px, calc(100% - 32px)); margin:24px auto 64px; background:var(--paper); box-shadow:0 18px 55px rgba(67,53,39,.12); }
+    .masthead { padding:58px 62px 38px; border-bottom:1px solid var(--rule); }
+    .eyebrow { color:var(--accent); font:500 12px/1.4 "Source Code Pro", monospace; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { max-width:760px; margin:16px 0 18px; font-size:40px; line-height:1.18; letter-spacing:-.025em; }
+    .byline { color:var(--muted); font-size:14px; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); margin-top:30px; border:1px solid var(--rule); }
+    .metric { padding:18px; border-right:1px solid var(--rule); }
+    .metric:last-child { border-right:0; }
+    .metric strong { display:block; color:var(--accent); font-size:23px; line-height:1.2; }
+    .metric span { color:var(--muted); font:400 11px/1.4 "Source Code Pro", monospace; text-transform:uppercase; letter-spacing:.06em; }
+    article { padding:40px 62px 72px; }
+    p { margin:0 0 18px; }
+    article > p:first-child { font-size:19px; line-height:1.7; }
+    h2 { margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:var(--accent); font-size:22px; line-height:1.35; }
+    h3 { margin:30px 0 10px; font-size:17px; }
+    ul, ol { margin:0 0 20px 24px; padding:0; }
+    li { margin:7px 0; padding-left:4px; }
+    blockquote { margin:26px 0; padding:18px 22px; background:var(--soft); border-left:4px solid var(--accent); font-size:18px; font-style:italic; }
+    code { padding:2px 5px; border-radius:3px; background:#efeae3; font:500 13px/1.5 "Source Code Pro", monospace; }
+    pre { overflow:auto; margin:24px 0; padding:22px; border:1px solid #2c3334; border-radius:4px; background:#172123; color:#e7efeb; font-size:13px; line-height:1.65; }
+    pre code { padding:0; background:none; color:inherit; }
+    a { color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }
+    .table-wrap { overflow-x:auto; margin:22px 0 28px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }
+    th, td { padding:10px 12px; border:1px solid var(--rule); text-align:left; vertical-align:top; }
+    th { background:var(--soft); font:500 11px/1.4 "Source Code Pro", monospace; letter-spacing:.04em; text-transform:uppercase; }
+    figure { margin:34px -20px; text-align:center; }
+    figure img { display:block; max-width:100%; max-height:720px; margin:auto; border:1px solid var(--rule); background:#fff; }
+    figcaption { max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:left; }
+    footer { padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }
+    @media (max-width:700px) {
+      .paper { width:100%; margin:0; box-shadow:none; }
+      .masthead, article { padding-left:22px; padding-right:22px; }
+      h1 { font-size:29px; }
+      .summary { grid-template-columns:1fr; }
+      .metric { border-right:0; border-bottom:1px solid var(--rule); }
+      .metric:last-child { border-bottom:0; }
+      figure { margin-left:0; margin-right:0; }
+      footer { padding-left:22px; padding-right:22px; }
+    }
+    @media print { body { background:#fff; } .paper { width:100%; margin:0; box-shadow:none; } .progress { display:none; } }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <main class="paper">
+    <header class="masthead">
+      <div class="eyebrow">Engineering notes · October 2026</div>
+      <h1>Harness Darwinism: What Happened When We Let Agent Rules Evolve</h1>
+      <div class="byline">Subrahmanyam Arunachalam · Harness engineering, evolutionary search, and Crafter</div>
+      <div class="summary" aria-label="Experiment summary">
+        <div class="metric"><strong>8</strong><span>generations</span></div>
+        <div class="metric"><strong>10</strong><span>candidates per generation</span></div>
+        <div class="metric"><strong>5.606</strong><span>best training score</span></div>
+      </div>
+    </header>
+    <article><p>During a hackathon, our team of three built a system called Harness Darwinism. The idea came from genetic algorithms. We started with a population of agent configurations. We evaluated them, kept the stronger configurations, and used them to create the next generation.</p>
+<p>We did not train or fine-tune the gameplay model. We kept the model fixed. We changed the harness around it: the system prompt, rules, memory policy, and amount of recent history.</p>
+<p>The final experiment ran for eight generations in Crafter, a small 2D survival game. The best harness reached a score of 5.606 on our training world. More important, the experiment showed us which parts of this approach worked, where it failed, and how quickly context costs can grow.</p>
+<figure><img src="assets/champion-replay.gif" alt="The final champion playing Crafter." loading="eager"><figcaption>The final champion playing Crafter.</figcaption></figure>
+<h2 id="1-the-hackathon-question">1. The hackathon question</h2>
+<p>The hackathon theme was recursive harness improvement. The question was direct: how can an agent improve the system around the model as it collects more experience?</p>
+<p>A harness includes the instructions, tools, memory, and control logic that surround a model. Most applications treat this harness as fixed code. A developer writes a prompt, selects a memory strategy, and adjusts it by hand.</p>
+<p>We wanted to treat the harness as a search problem.</p>
+<p>Our initial question was:</p>
+<blockquote>If several harnesses play the same game, can we select the better ones and use their failures to create stronger harnesses?</blockquote>
+<p>This is where the genetic algorithm came in.</p>
+<h2 id="2-from-genetic-algorithms-to-agent-harnesses">2. From genetic algorithms to agent harnesses</h2>
+<p>We mapped the standard parts of a genetic algorithm to the agent system.</p>
+<div class="table-wrap"><table><thead><tr><th>Genetic algorithm</th><th>Harness Darwinism</th></tr></thead><tbody><tr><td>Genome</td><td>System prompt, rules, memory policy, and context budget</td></tr><tr><td>Individual</td><td>One harness configuration</td></tr><tr><td>Population</td><td>Ten harness candidates</td></tr><tr><td>Environment</td><td>Crafter</td></tr><tr><td>Fitness</td><td>Crafter achievement score</td></tr><tr><td>Selection</td><td>Keep the five strongest candidates</td></tr><tr><td>Elitism</td><td>Copy those five candidates to the next generation</td></tr><tr><td>Crossover</td><td>Ask a meta-agent to combine two parent harnesses</td></tr><tr><td>Mutation</td><td>Ask the meta-agent for one targeted change</td></tr><tr><td>Archive</td><td>Keep eliminated candidates and their evidence</td></tr></tbody></table></div>
+<p>One term caused confusion while we built the system. A candidate is not a seed. A candidate is a genome or harness configuration. A seed identifies the generated Crafter world. We used world seed 105 for the main experiment.</p>
+<h2 id="3-what-was-inside-a-genome">3. What was inside a genome?</h2>
+<p>Each genome contained four main parts:</p>
+<pre data-language="json"><code>{
+  &quot;system_prompt&quot;: &quot;You are a Crafter survival agent...&quot;,
+  &quot;rules&quot;: [
+    &quot;Collect wood before anything else.&quot;,
+    &quot;Place a crafting table early.&quot;
+  ],
+  &quot;memory_policy&quot;: {
+    &quot;type&quot;: &quot;notes&quot;,
+    &quot;max_items&quot;: 20
+  },
+  &quot;context_budget&quot;: {
+    &quot;history_steps&quot;: 10
+  }
+}</code></pre>
+<p>The <code>rules</code> field gave the gameplay model a strategy. The memory policy controlled retained notes. The context budget controlled how many recent gameplay turns returned to the model on each call.</p>
+<p>We used Claude Haiku 4.5 as the fixed gameplay model. It received the current observation, retained history, memory notes, and the genome rules. It returned one Crafter action.</p>
+<p>We used Claude Opus 4.6 as the meta-agent. It never played the game. It combined parent genomes and proposed mutations.</p>
+<p>Generation 0 used a pool of ten hand-written starter rules. Each of the ten candidates received a random subset of one to five rules. This gave us a varied starting population.</p>
+<h2 id="4-why-we-used-crafter">4. Why we used Crafter</h2>
+<p>Crafter is a 2D survival environment that looks like a small version of Minecraft. The player collects resources, manages health and energy, fights enemies, and crafts better tools.</p>
+<p>Crafter measures 22 achievements. These achievements include collecting wood, placing a table, crafting pickaxes, finding coal, building a furnace, and reaching iron or diamond.</p>
+<p>It worked well for this project for three reasons:</p>
+<ol><li>The game provides an automatic fitness signal.</li><li>Short episodes make repeated evaluation possible.</li><li>A replay makes the agent's behavior easy to inspect.</li></ol>
+<p>The last point mattered during the demo. A score chart tells one part of the story. A replay shows whether the agent follows its rules or wastes its steps.</p>
+<h2 id="5-how-one-generation-worked">5. How one generation worked</h2>
+<p>Each generation had ten candidates. The loop had four phases.</p>
+<h3>Phase 1: Evaluate</h3>
+<p>Every candidate played the same Crafter world. This kept the comparison within a generation consistent. We stored the score, achievements, actions, token usage, termination reason, and replay.</p>
+<h3>Phase 2: Select</h3>
+<p>We ranked the ten candidates by fitness. The top five became survivors. The other five moved to the archive.</p>
+<p>The system copied each survivor into the next generation. This is elitism. A strong candidate could survive even when every new child performed poorly.</p>
+<h3>Phase 3: Crossover and mutation</h3>
+<p>The system selected parent pairs with fitness-weighted sampling. It sometimes selected an archived candidate to add diversity.</p>
+<p>Opus then received both parent configurations. It produced one crossover configuration and explained which traits it kept.</p>
+<p>Next, Opus received failure summaries from the selected parents. A summary contained the termination reason, step count, and unlocked achievements. Opus used this evidence to propose one targeted mutation.</p>
+<h3>Phase 4: Refill</h3>
+<p>Five survivors and five children formed the next population. The population always returned to ten candidates.</p>
+<p>The complete loop was:</p>
+<pre data-language="text"><code>10 candidates
+    ↓ evaluate
+rank by fitness
+    ↓ select
+5 survivors
+    ├── copy forward as elites
+    └── select parent pairs
+            ↓
+       crossover + mutation
+            ↓
+         5 children
+            ↓
+next population of 10</code></pre>
+<h2 id="6-how-failure-became-input">6. How failure became input</h2>
+<p>The useful part of this design was not only the selection of high scores. The system also used evidence from weak runs.</p>
+<p>One early agent crafted a wooden pickaxe but did not continue to stone tools. Its mutation added more direct instructions:</p>
+<ul><li>Mine stone immediately after crafting the wooden pickaxe.</li><li>Do not repeat completed actions.</li><li>Check the inventory before collecting more material.</li><li>Reassess the next unfinished achievement after each action.</li></ul>
+<p>The mutation also increased <code>history_steps</code> from 12 to 16. The model could then see more of its recent decisions.</p>
+<p>This did not mean that every failed candidate contributed to every mutation. The current implementation used failure summaries from the two selected parents. Archived candidates could also return through parent selection.</p>
+<h2 id="7-mongodb-was-the-experiment-memory">7. MongoDB was the experiment memory</h2>
+<p>MongoDB Atlas stored the state of the evolutionary process. We used four collections.</p>
+<div class="table-wrap"><table><thead><tr><th>Collection</th><th>Stored data</th></tr></thead><tbody><tr><td><code>harnesses</code></td><td>Genome, generation, parents, fitness, crossover note, and mutation note</td></tr><tr><td><code>runs</code></td><td>Episode score, achievements, actions, usage, failure summary, and replay path</td></tr><tr><td><code>metrics</code></td><td>Best and mean score for each generation</td></tr><tr><td><code>ledger</code></td><td>Hashes of previously attempted configurations</td></tr></tbody></table></div>
+<p>This design gave us two practical features.</p>
+<p>First, we could trace a child back to both parents. The dashboard showed the selected parents, crossover output, mutation, final rules, and score.</p>
+<p>Second, we could resume an interrupted experiment. A long run could reuse completed candidates instead of paying for the same evaluation again.</p>
+<p>The ledger prevented the meta-agent from returning a configuration that we had already tested. This became important after several generations, when the population began to converge.</p>
+<h2 id="8-what-the-results-showed">8. What the results showed</h2>
+<p>The experiment ran through Generation 7. We used ten candidates, five survivors, and one training world per generation.</p>
+<p>We also changed the episode budget during the run. Generations 0–4 used 85 steps. Generations 5–7 used 200 steps. The two phases must be read separately.</p>
+<figure><img src="assets/score-by-generation.png" alt="Best and mean fitness by generation. The gap marks the episode-budget change." loading="lazy"><figcaption>Best and mean fitness by generation. The gap marks the episode-budget change.</figcaption></figure>
+<h3>The 85-step phase</h3>
+<p>Generation 0 had a best score of 1.314 and a population mean of 0.901.</p>
+<p>By Generation 2, the best score reached 1.854. That is a 41% increase. The best score then stayed at 1.854 through Generation 4.</p>
+<p>The population mean reached 1.299 in Generation 4. This was a 44% increase from Generation 0.</p>
+<h3>The 200-step phase</h3>
+<p>Generation 5 produced a new best score of 5.606. This result is not directly comparable with the 85-step phase because the candidate received more actions.</p>
+<p>The 200-step phase still gave us a useful comparison of Generations 5–7. The best score stayed at 5.606. The population mean increased from 1.606 to 2.740.</p>
+<p>So the later generations did not produce a better champion. They improved the overall population. More candidates reached the middle of the technology tree instead of failing at the first few achievements.</p>
+<p>The champion unlocked nine achievements. It collected wood, stone, coal, water, and a sapling. It placed a table and furnace. It also crafted wooden and stone pickaxes.</p>
+<h2 id="9-one-lineage-that-changed-the-behavior">9. One lineage that changed the behavior</h2>
+<p>Candidate <code>demo-evolution-3_g2_00</code> provides a clear example.</p>
+<p>Its parents scored 1.314 and 0.876. The crossover kept survival rules from one parent and technology-tree rules from the other.</p>
+<p>The mutation then added explicit stone progression, inventory checks, and goal reassessment. It increased the history budget from 12 to 16 turns.</p>
+<p>The child scored 1.854. It collected wood, stone, and coal. It also placed a table and crafted a wooden pickaxe.</p>
+<p>This example does not prove that one rule caused the improvement. The child changed several fields at the same time. A controlled rule ablation would be necessary for that claim.</p>
+<p>Still, the lineage gave us a useful account of what changed and why the meta-agent changed it.</p>
+<h2 id="10-the-final-rules">10. The final rules</h2>
+<p>The Generation 7 champion inherited the configuration first found in Generation 5. Its strongest patterns were simple:</p>
+<ol><li>Move through the tool tiers without delay.</li><li>Dig down for stone instead of wandering across the surface.</li><li>Use step thresholds to detect stalled progress.</li><li>Check inventory before repeated collection or crafting.</li><li>Record the next three actions after each crafting milestone.</li><li>Manage food, water, energy, and night safety before they become emergencies.</li></ol>
+<p>The full champion had nine detailed rules and retained 25 history steps. Some rules were too long. Some also made claims about the world that need more testing. For example, the champion stated that stone was always two to four blocks below the surface.</p>
+<p>This is another reason to evaluate on unseen worlds. A useful rule on seed 105 can become a bad rule elsewhere.</p>
+<figure><img src="assets/champion-frame.png" alt="The Generation 7 champion near its furnace during a 200-step episode." loading="lazy"><figcaption>The Generation 7 champion near its furnace during a 200-step episode.</figcaption></figure>
+<h2 id="11-what-broke-during-the-build">11. What broke during the build</h2>
+<p>The evolution loop exposed several engineering problems.</p>
+<h3>Invalid crossover output</h3>
+<p>The meta-agent sometimes returned text that did not match the required JSON schema. The first version accepted one attempt and then copied Parent A.</p>
+<p>We changed crossover to retry three times. Each retry told the model why the previous response was invalid. The system now records the attempt count or the final fallback.</p>
+<h3>Duplicate mutations</h3>
+<p>The meta-agent sometimes proposed the same effective genome three times. This happened when strong parents had similar rules and the failure evidence suggested the same fix.</p>
+<p>After three duplicate mutations, the system used a deterministic fallback. It changed the history budget to the nearest unused value. The mutation note stated that this was a fallback, not an LLM decision.</p>
+<h3>Interrupted evaluations</h3>
+<p>Long episodes made interruption likely. We added resume logic that checked each candidate and seed. Completed runs were reused. Missing runs continued from the same stored generation.</p>
+<h3>Missing visual evidence</h3>
+<p>The first generations saved scores but did not record gameplay frames. We added frame capture and GIF generation for later episodes. This made every new candidate inspectable from the dashboard.</p>
+<h3>Context cost</h3>
+<p>A 200-step episode could use more than two million input tokens. Each action included the observation and recent interaction history. A larger <code>history_steps</code> value increased the prompt on every later action.</p>
+<p>This made context budget a real gene. It affected behavior, latency, and cost at the same time.</p>
+<h2 id="12-what-this-experiment-did-not-prove">12. What this experiment did not prove</h2>
+<p>This was a hackathon experiment, not a benchmark result.</p>
+<p>The main limitations were:</p>
+<ul><li>We trained and measured on one Crafter seed.</li><li>We did not complete a paired evaluation on unseen seeds.</li><li>We changed the episode budget after Generation 4.</li><li>We did not run rule-by-rule ablations.</li><li>We did not compare against random mutation or hill climbing.</li><li>Early meta-agent calls did not persist token usage.</li></ul>
+<p>Because of these limits, we cannot claim that the champion generalizes. We can claim that the system completed selection, crossover, mutation, evaluation, lineage storage, resume, and visual replay.</p>
+<h2 id="13-what-we-would-do-next">13. What we would do next</h2>
+<p>The next experiment should use several shared training seeds per generation. After evolution, we should freeze the champion and compare it with the original harness on unseen paired seeds.</p>
+<p>We would also make four changes:</p>
+<ol><li>Add cost to the fitness function.</li><li>Track meta-agent tokens for every crossover and mutation.</li><li>Add diversity pressure so similar candidates do not take over the population.</li><li>Remove one champion rule at a time and measure the score change.</li></ol>
+<p>These changes would answer the question that the hackathon run could not answer: did evolution create a harness that works better outside one world?</p>
+<h2 id="14-final-thoughts">14. Final thoughts</h2>
+<p>We presented Harness Darwinism at the hackathon, but the project was not selected. I still liked the result because the system worked from end to end.</p>
+<p>The model weights stayed fixed. The rules, memory policy, and context budget became the search space. The game supplied the fitness signal. MongoDB stored the history of the search. A second model acted as the genetic operator.</p>
+<p>The best score did not increase in every generation. Evolution also converged and repeated itself. These were useful results, not failures to hide.</p>
+<p>The main lesson was simple: an agent harness can be treated as an object that we evaluate, compare, inherit, and change. The difficult part is not generating another prompt. The difficult part is keeping the evidence clean enough to know whether the new prompt is better.</p>
+<h2 id="references">References</h2>
+<ol><li>Danijar Hafner. <a href="https://arxiv.org/abs/2109.06780">Benchmarking the Spectrum of Agent Capabilities</a>, 2021.</li><li>Jenny Zhang, Shengran Hu, Cong Lu, Robert Lange, and Jeff Clune. <a href="https://arxiv.org/abs/2505.22954">Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents</a>, 2025.</li><li>Cerebral Valley. <a href="https://cerebralvalley.ai/e/mongodb-sftw-hackathon">The Harness Engineering &amp; Model Wrangling Hackathon</a>.</li><li>Project repository: <a href="https://github.com/Subrahmanyam2305/harness-darwinism">Harness Darwinism</a>.</li></ol></article>
+    <footer>Prepared from Atlas experiment records and local replay artifacts. Training world: seed 105.</footer>
+  </main>
+  <script>
+    const bar = document.getElementById('progress');
+    addEventListener('scroll', () => {
+      const range = document.documentElement.scrollHeight - innerHeight;
+      bar.style.width = `${range > 0 ? scrollY / range * 100 : 0}%`;
+    }, { passive:true });
+  </script>
+</body>
+</html>

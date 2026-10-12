@@ -1,0 +1,70 @@
+{
+  "experiment": "demo-evolution-3",
+  "training_seed": 105,
+  "population_size": 10,
+  "survivors": 5,
+  "metrics": [
+    {
+      "generation": 0,
+      "best": 1.3143128565,
+      "mean": 0.9012244958,
+      "steps": 85
+    },
+    {
+      "generation": 1,
+      "best": 1.3143128565,
+      "mean": 0.8135883296,
+      "steps": 85
+    },
+    {
+      "generation": 2,
+      "best": 1.8544838154,
+      "mean": 1.1931494749,
+      "steps": 85
+    },
+    {
+      "generation": 3,
+      "best": 1.8544838154,
+      "mean": 1.0530078795,
+      "steps": 85
+    },
+    {
+      "generation": 4,
+      "best": 1.8544838154,
+      "mean": 1.2992493012,
+      "steps": 85
+    },
+    {
+      "generation": 5,
+      "best": 5.6061685928,
+      "mean": 1.6060391754,
+      "steps": 200
+    },
+    {
+      "generation": 6,
+      "best": 5.6061685928,
+      "mean": 2.4143589073,
+      "steps": 200
+    },
+    {
+      "generation": 7,
+      "best": 5.6061685928,
+      "mean": 2.7397357275,
+      "steps": 200
+    }
+  ],
+  "champion": {
+    "id": "demo-evolution-3_g7_05",
+    "origin": "demo-evolution-3_g5_02",
+    "score": 5.60616859275494,
+    "steps": 200,
+    "achievements_unlocked": 9,
+    "history_steps": 25
+  },
+  "limitations": [
+    "One training seed",
+    "No held-out paired evaluation",
+    "Step budget changed after Generation 4",
+    "Meta-agent token usage was not persisted"
+  ]
+}
