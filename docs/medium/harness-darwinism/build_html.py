@@ -154,7 +154,7 @@ def build() -> None:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A technical account of evolving an LLM agent harness with selection, crossover, mutation, Crafter, and MongoDB Atlas.">
+  <meta name="description" content="A research report on evolving an LLM agent harness with genetic algorithms, Crafter, and MongoDB Atlas.">
   <title>{html.escape(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -179,6 +179,7 @@ def build() -> None:
     p {{ margin:0 0 18px; }}
     article > p:first-child {{ font-size:19px; line-height:1.7; }}
     h2 {{ margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:var(--accent); font-size:22px; line-height:1.35; }}
+    #abstract {{ margin-top:0; }}
     h3 {{ margin:30px 0 10px; font-size:17px; }}
     ul, ol {{ margin:0 0 20px 24px; padding:0; }}
     li {{ margin:7px 0; padding-left:4px; }}
@@ -193,6 +194,7 @@ def build() -> None:
     th {{ background:var(--soft); font:500 11px/1.4 "Source Code Pro", monospace; letter-spacing:.04em; text-transform:uppercase; }}
     figure {{ margin:34px -20px; text-align:center; }}
     figure img {{ display:block; max-width:100%; max-height:720px; margin:auto; border:1px solid var(--rule); background:#fff; }}
+    figure img[src$=".gif"] {{ width:min(100%, 520px); image-rendering:pixelated; }}
     figcaption {{ max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:left; }}
     footer {{ padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }}
     @media (max-width:700px) {{
@@ -212,17 +214,17 @@ def build() -> None:
   <div class="progress" id="progress"></div>
   <main class="paper">
     <header class="masthead">
-      <div class="eyebrow">Engineering notes · October 2026</div>
+      <div class="eyebrow">Research report · October 2026</div>
       <h1>{html.escape(title)}</h1>
-      <div class="byline">{html.escape(author)} · Harness engineering, evolutionary search, and Crafter</div>
+      <div class="byline">{html.escape(author)} · Recursive harness improvement in Crafter</div>
       <div class="summary" aria-label="Experiment summary">
-        <div class="metric"><strong>8</strong><span>generations</span></div>
-        <div class="metric"><strong>10</strong><span>candidates per generation</span></div>
+        <div class="metric"><strong>41.1%</strong><span>best-score gain at 85 actions</span></div>
+        <div class="metric"><strong>80</strong><span>evaluated harnesses</span></div>
         <div class="metric"><strong>5.606</strong><span>best training score</span></div>
       </div>
     </header>
     <article>{body}</article>
-    <footer>Prepared from Atlas experiment records and local replay artifacts. Training world: seed 105.</footer>
+    <footer>Research report prepared from Atlas experiment records and recorded Crafter episodes. Training world: seed 105.</footer>
   </main>
   <script>
     const bar = document.getElementById('progress');

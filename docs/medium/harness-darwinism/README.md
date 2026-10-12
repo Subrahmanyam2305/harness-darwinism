@@ -4,10 +4,17 @@ This folder contains the publication draft and its supporting evidence.
 
 ## Files
 
-- `article.md`: Medium-ready article copy.
-- `index.html`: Local article preview in the visual style of the author's RLVR article.
+- `article.md`: Medium-ready research article.
+- `index.html`: Local research-paper preview in the visual style of the author's RLVR article.
 - `champion-rules.md`: Exact champion rules exported from Atlas.
 - `evidence.json`: Metrics and experiment constraints used by the article.
+- `lineage.json`: Detailed Atlas evidence for the two lineage case studies.
+- `lineage-all.json`: Parent links and scores for all 80 evaluated harnesses.
+- `build_assets.py`: Rebuilds diagrams and compressed generation replays.
+- `assets/architecture.drawio`: Editable source for the system architecture.
+- `assets/architecture.png`: Medium-ready system architecture.
+- `assets/lineage-overview.png`: Full eight-generation lineage figure.
+- `assets/generation-*.gif`: Recorded behavior at Generations 3, 4, and 5.
 - `assets/champion-replay.gif`: Compressed champion replay for Medium.
 - `assets/champion-frame.png`: Still image from the champion replay.
 - `assets/score-by-generation.png`: Score chart with the step-budget change marked.
@@ -15,9 +22,9 @@ This folder contains the publication draft and its supporting evidence.
 ## Medium upload order
 
 1. Copy the text from `article.md`.
-2. Upload `champion-replay.gif` after the introduction.
-3. Upload `score-by-generation.png` in the results section.
-4. Upload `champion-frame.png` after the champion rules section.
+2. Upload `architecture.png` in the methodology section.
+3. Upload `score-by-generation.png` and `lineage-overview.png` in the results section.
+4. Upload the three `generation-*.gif` files in their listed order.
 5. Check code blocks, tables, captions, and links in Medium's editor.
 
 The article separates the 85-step and 200-step phases. Do not remove that distinction when editing the results.

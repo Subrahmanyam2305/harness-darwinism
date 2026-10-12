@@ -59,7 +59,19 @@
     "score": 5.60616859275494,
     "steps": 200,
     "achievements_unlocked": 9,
-    "history_steps": 25
+    "history_steps": 25,
+    "input_tokens": 2524162,
+    "output_tokens": 12115
+  },
+  "reported_comparisons": {
+    "best_gain_generation_0_to_2_at_85_steps_percent": 41.1,
+    "mean_gain_generation_0_to_4_at_85_steps_percent": 44.2,
+    "mean_gain_generation_5_to_7_at_200_steps_percent": 70.6
+  },
+  "published_context": {
+    "crafterdojo_prior_baseline_score": 31.8,
+    "crafterdojo_c_vpt_large_score": 61.4,
+    "comparison_is_direct": false
   },
   "limitations": [
     "One training seed",
