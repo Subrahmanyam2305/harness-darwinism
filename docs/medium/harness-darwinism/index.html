@@ -15,15 +15,9 @@
     body { margin:0; background:#eee9e2; color:var(--ink); font-family:"Libre Baskerville", Georgia, serif; font-size:16px; line-height:1.75; }
     .progress { position:fixed; z-index:10; top:0; left:0; width:0; height:3px; background:var(--accent); }
     .paper { width:min(900px, calc(100% - 32px)); margin:24px auto 64px; background:var(--paper); box-shadow:0 18px 55px rgba(67,53,39,.12); }
-    .masthead { padding:58px 62px 38px; border-bottom:1px solid var(--rule); }
-    .eyebrow { color:var(--accent); font:500 12px/1.4 "Source Code Pro", monospace; letter-spacing:.12em; text-transform:uppercase; }
-    h1 { max-width:760px; margin:16px 0 18px; font-size:40px; line-height:1.18; letter-spacing:-.025em; }
+    .masthead { padding:64px 62px 34px; text-align:center; }
+    h1 { max-width:760px; margin:0 auto 20px; font-size:40px; line-height:1.18; letter-spacing:-.025em; }
     .byline { color:var(--muted); font-size:14px; }
-    .summary { display:grid; grid-template-columns:repeat(3,1fr); margin-top:30px; border:1px solid var(--rule); }
-    .metric { padding:18px; border-right:1px solid var(--rule); }
-    .metric:last-child { border-right:0; }
-    .metric strong { display:block; color:var(--accent); font-size:23px; line-height:1.2; }
-    .metric span { color:var(--muted); font:400 11px/1.4 "Source Code Pro", monospace; text-transform:uppercase; letter-spacing:.06em; }
     article { padding:40px 62px 72px; }
     p { margin:0 0 18px; }
     article > p:first-child { font-size:19px; line-height:1.7; }
@@ -50,9 +44,6 @@
       .paper { width:100%; margin:0; box-shadow:none; }
       .masthead, article { padding-left:22px; padding-right:22px; }
       h1 { font-size:29px; }
-      .summary { grid-template-columns:1fr; }
-      .metric { border-right:0; border-bottom:1px solid var(--rule); }
-      .metric:last-child { border-bottom:0; }
       figure { margin-left:0; margin-right:0; }
       footer { padding-left:22px; padding-right:22px; }
     }
@@ -63,14 +54,8 @@
   <div class="progress" id="progress"></div>
   <main class="paper">
     <header class="masthead">
-      <div class="eyebrow">Research report · October 2026</div>
       <h1>Harness Darwinism: Evolving Agent Harnesses with Genetic Algorithms</h1>
-      <div class="byline">Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam · Recursive harness improvement in Crafter</div>
-      <div class="summary" aria-label="Experiment summary">
-        <div class="metric"><strong>41.1%</strong><span>best-score gain at 85 actions</span></div>
-        <div class="metric"><strong>80</strong><span>evaluated harnesses</span></div>
-        <div class="metric"><strong>5.606</strong><span>best training score</span></div>
-      </div>
+      <div class="byline">Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam</div>
     </header>
     <article><h2 id="abstract">Abstract</h2>
 <p>We built Harness Darwinism during a three-person hackathon. The task was to build a recursively self-improving agent. We kept the gameplay model fixed and evolved the harness around it.</p>
