@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 from pathlib import Path
 
@@ -97,6 +98,23 @@ def render_markdown(source: str) -> tuple[str, str, str]:
             flush_list()
             flush_table()
             alt, src = image.groups()
+            if src == "assets/lineage-overview.png":
+                out.append(
+                    '<section class="lineage-explorer" aria-labelledby="lineage-title">'
+                    '<div class="lineage-heading">'
+                    '<h3 id="lineage-title">Interactive lineage</h3>'
+                    "<p>Click any connection to inspect its parents, crossover output, mutation, and final child genome.</p>"
+                    "</div>"
+                    '<div class="lineage-layout">'
+                    '<div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" '
+                    'aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div>'
+                    '<aside class="lineage-detail" id="lineage-detail" aria-live="polite">'
+                    '<p class="detail-empty">Select a parent-to-child connection.</p>'
+                    "</aside></div></section>"
+                    f'<noscript><figure><img src="{html.escape(src)}" alt="{html.escape(alt)}">'
+                    f"<figcaption>{inline(alt)}</figcaption></figure></noscript>"
+                )
+                continue
             loading = "eager" if "champion-replay" in src else "lazy"
             out.append(
                 f'<figure><img src="{html.escape(src)}" alt="{html.escape(alt)}" '
@@ -149,6 +167,10 @@ def render_markdown(source: str) -> tuple[str, str, str]:
 def build() -> None:
     """Build index.html beside the source article."""
     title, author, body = render_markdown((ROOT / "article.md").read_text())
+    lineage_json = json.dumps(
+        json.loads((ROOT / "lineage-all.json").read_text())
+    ).replace("</", "<\\/")
+    lineage_script = (ROOT / "lineage.js").read_text()
     document = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -190,12 +212,36 @@ def build() -> None:
     figure img {{ display:block; max-width:100%; max-height:720px; margin:auto; border:1px solid var(--rule); background:#fff; }}
     figure img[src$=".gif"] {{ width:min(100%, 520px); image-rendering:pixelated; }}
     figcaption {{ max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:left; }}
+    .lineage-explorer {{ width:min(1160px, calc(100vw - 48px)); margin:38px 50%; transform:translateX(-50%); border:1px solid var(--rule); background:#fff; }}
+    .lineage-heading {{ padding:20px 24px 16px; border-bottom:1px solid var(--rule); }}
+    .lineage-heading h3 {{ margin:0 0 4px; color:var(--accent); }}
+    .lineage-heading p {{ margin:0; color:var(--muted); font-size:13px; }}
+    .lineage-layout {{ display:grid; grid-template-columns:minmax(0, 2fr) minmax(310px, 1fr); min-height:620px; }}
+    .lineage-canvas {{ overflow:auto; border-right:1px solid var(--rule); background:var(--paper); }}
+    #lineage-graph {{ display:block; min-width:900px; width:100%; height:620px; }}
+    .lineage-edge {{ cursor:pointer; }}
+    .lineage-edge:focus {{ outline:none; }}
+    .lineage-edge:focus .edge-visible {{ stroke:var(--accent); stroke-width:4; }}
+    .lineage-node {{ cursor:pointer; }}
+    .lineage-detail {{ max-height:620px; overflow:auto; padding:20px; background:#faf7f2; font-family:"Source Code Pro", monospace; font-size:11px; line-height:1.55; }}
+    .lineage-detail h3 {{ margin:0 0 8px; font-family:"Libre Baskerville", Georgia, serif; font-size:17px; }}
+    .lineage-detail h4 {{ margin:18px 0 7px; padding-top:12px; border-top:1px solid var(--rule); color:var(--accent); font-size:11px; letter-spacing:.05em; text-transform:uppercase; }}
+    .lineage-detail p {{ margin:0 0 10px; }}
+    .lineage-detail pre {{ max-height:260px; margin:8px 0 14px; padding:12px; white-space:pre-wrap; overflow:auto; font-size:10px; line-height:1.5; }}
+    .detail-empty {{ color:var(--muted); font-family:"Libre Baskerville", Georgia, serif; font-style:italic; }}
+    .detail-badge {{ display:inline-block; margin:0 0 12px; padding:3px 7px; border-radius:999px; background:var(--accent); color:#fff; font-size:10px; text-transform:uppercase; }}
+    .parent-card {{ margin:8px 0; padding:10px; border:1px solid var(--rule); background:#fff; }}
+    .parent-card strong {{ display:block; color:var(--teal); }}
     footer {{ padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }}
     @media (max-width:700px) {{
       .paper {{ width:100%; margin:0; box-shadow:none; }}
       .masthead, article {{ padding-left:22px; padding-right:22px; }}
       h1 {{ font-size:29px; }}
       figure {{ margin-left:0; margin-right:0; }}
+      .lineage-explorer {{ width:calc(100vw - 20px); }}
+      .lineage-layout {{ grid-template-columns:1fr; }}
+      .lineage-canvas {{ border-right:0; border-bottom:1px solid var(--rule); }}
+      .lineage-detail {{ max-height:none; }}
       footer {{ padding-left:22px; padding-right:22px; }}
     }}
     @media print {{ body {{ background:#fff; }} .paper {{ width:100%; margin:0; box-shadow:none; }} .progress {{ display:none; }} }}
@@ -211,6 +257,7 @@ def build() -> None:
     <article>{body}</article>
     <footer>Research report prepared from Atlas experiment records and recorded Crafter episodes. Training world: seed 105.</footer>
   </main>
+  <script id="lineage-data" type="application/json">{lineage_json}</script>
   <script>
     const bar = document.getElementById('progress');
     addEventListener('scroll', () => {{
@@ -218,6 +265,7 @@ def build() -> None:
       bar.style.width = `${{range > 0 ? scrollY / range * 100 : 0}}%`;
     }}, {{ passive:true }});
   </script>
+  <script>{lineage_script}</script>
 </body>
 </html>
 """
