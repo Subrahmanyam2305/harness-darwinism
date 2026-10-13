@@ -81,20 +81,16 @@
       <div class="byline">Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam</div>
     </header>
     <article><h2 id="1-introduction">1. Introduction</h2>
-<p>As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve across repeated attempts without changing their weights.</p>
-<p>Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose Harness Darwinism, an evolutionary framework for studying harness evolution as a form of recursive self-improvement.</p>
+<p>As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve performance across repeated attempts without changing their weights.</p>
+<p>Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose <strong>Harness Darwinism</strong>, a framework for studying harness evolution as a form of recursive self-improvement.</p>
 <p>Although our experiments did not produce a high absolute score per episode, after eight generations in Crafter, the best score per episode increased from <strong>1.3</strong> to <strong>5.7</strong>, indicating that the harness evolved over time.</p>
-<h2 id="2-related-work">2. Related Work</h2>
-<p>Generative Agents retrieves observations and synthesized reflections for planning [2]. Reflexion stores verbal feedback in episodic memory [3]. ExpeL extracts lessons from prior tasks and recalls them later [4].</p>
-<p>Voyager stores and retrieves executable skills rather than raw trajectories [5]. These systems improve future decisions without changing model weights. Our method changes the harness itself.</p>
-<p>Genetic algorithms use selection, crossover, and mutation [6]. The Darwin Gödel Machine evolves coding agents and keeps a lineage archive [7]. We use generations, two-parent crossover, and typed harness genomes.</p>
-<h2 id="3-methodology">3. Methodology</h2>
-<h3>3.1 Genetic algorithm</h3>
-<p>A genetic algorithm starts with a population of candidate solutions. Each candidate has a genome that defines its behavior.</p>
-<p>The method has five main stages:</p>
-<ol><li><strong>Initialization:</strong> Create a varied starting population.</li><li><strong>Fitness evaluation:</strong> Run every candidate and assign a score.</li><li><strong>Selection:</strong> Retain candidates with higher fitness.</li><li><strong>Crossover:</strong> Combine traits from two selected parents.</li><li><strong>Mutation:</strong> Make a small change that can produce a new behavior.</li></ol>
+<h2 id="2-methodology">2. Methodology</h2>
+<h3>2.1 Primer on genetic algorithms</h3>
+<p>A genetic algorithm mimics Darwin's principle of evolution. It begins with a population of candidate solutions, each with a genome that defines its behavior.</p>
+<p>This process has five main stages:</p>
+<ol><li><strong>Initialization:</strong> The process starts with an initial set of candidates that take part in evolution. These candidates can be considered the <em>seeds</em>.</li><li><strong>Fitness evaluation:</strong> Every candidate is evaluated using a fitness function and assigned a score.</li><li><strong>Selection:</strong> Candidates are selected through a process similar to a roulette wheel, where the probability of selection is proportional to their fitness scores.</li><li><strong>Crossover:</strong> This is the crux of evolution, where two strong candidates cross to produce an offspring that can inherit dominant traits from either parent.</li><li><strong>Mutation:</strong> After crossover, a small part of the offspring's genome is randomly updated to preserve diversity among the new candidates.</li></ol>
 <p>The next population contains survivors and children. Repeating this cycle searches the genome space without testing every possible genome.</p>
-<h3>3.2 Our method</h3>
+<h3>2.2 Our method</h3>
 <p>In Harness Darwinism, each agent harness is represented as one genome. The genome contains fields that the evolution loop can change and validate.</p>
 <pre data-language="json"><code>{
   &quot;system_prompt&quot;: &quot;You are a Crafter survival agent...&quot;,
@@ -115,54 +111,54 @@
 <p>The meta-agent then reads failure summaries from the two parents. Each summary contains the termination reason, step count, and unlocked achievements. It proposes one targeted mutation.</p>
 <p>The system records every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash. This evidence makes the search resumable and keeps its lineage visible.</p>
 <figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence." loading="lazy"><figcaption>System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.</figcaption></figure>
-<h3>3.3 Initialization</h3>
+<h3>2.3 Initialization</h3>
 <p>Generation 0 used ten hand-written starter rules. They covered resource collection, tool crafting, health, water, sleep, combat, and furnace construction.</p>
 <p>Each initial genome received a random subset of one to five rules. This created ten different harnesses without asking the meta-agent to design the first population.</p>
 <p>The starting pool was small and simple. This limited the search because later genomes could only combine those rules or add strategies that the mutation model inferred from failures.</p>
-<h3>3.4 Fitness function</h3>
+<h3>2.4 Fitness function</h3>
 <p>Crafter tracks 22 achievements. We computed the standard Crafter score from achievement success rates:</p>
 <pre data-language="text"><code>score = exp(mean(log(1 + 100 × achievement_rate))) - 1</code></pre>
 <p>All candidates in one generation played the same world. This reduced within-generation noise and made selection consistent.</p>
 <p>Our run used one world per generation. With one episode, each achievement rate was either zero or one. This produced a valid training signal, but it was a weak estimate of general performance.</p>
-<h3>3.5 Selection and elitism</h3>
+<h3>2.5 Selection and elitism</h3>
 <p>We ranked ten candidates by fitness. The top five became survivors. The bottom five moved to the archive.</p>
 <p>Each survivor was copied into the next generation. This elitism step protected strong genomes from poor children. It also explains why some nodes in the lineage have one parent and no crossover.</p>
-<h3>3.6 Crossover</h3>
+<h3>2.6 Crossover</h3>
 <p>Parent pairs were sampled with fitness-based weights. The system could also select an archived genome with a small probability to restore diversity.</p>
 <p>The meta-agent merged complementary rules, memory settings, and context budgets. The output had to match the genome schema. Invalid output was retried up to three times.</p>
-<h3>3.7 Mutation</h3>
+<h3>2.7 Mutation</h3>
 <p>After crossover, the meta-agent read failure summaries from both parents. It added, removed, or changed one rule. It could also adjust the memory policy or context budget.</p>
 <p>A global ledger stored the hash of every tried configuration. Duplicate mutations were retried three times. A deterministic context-budget change acted as the final novelty fallback.</p>
 <p>Five elite copies and five children formed the next population. The active population therefore remained fixed at ten.</p>
-<h2 id="4-experiments">4. Experiments</h2>
-<h3>4.1 Crafter environment</h3>
+<h2 id="3-experiments">3. Experiments</h2>
+<h3>3.1 Crafter environment</h3>
 <p>Crafter is a 2D survival game with a procedurally generated world. The agent collects resources, manages health and energy, fights enemies, builds stations, and crafts better tools [1].</p>
 <p>The action space has 17 discrete actions. Evaluation covers 22 achievements, from collecting wood to crafting advanced tools and finding diamond.</p>
 <p>We optimized the geometric-mean Crafter score. This metric rewards progress across the full achievement set and gives extra value to achievements that few episodes unlock.</p>
-<h3>4.2 Experiment setup</h3>
+<h3>3.2 Experiment setup</h3>
 <div class="table-wrap"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody><tr><td>Experiment</td><td><code>demo-evolution-3</code></td></tr><tr><td>Generations</td><td>8, numbered 0–7</td></tr><tr><td>Candidates per generation</td><td>10</td></tr><tr><td>Survivors per generation</td><td>5</td></tr><tr><td>Children per generation</td><td>5</td></tr><tr><td>Training worlds per generation</td><td>1</td></tr><tr><td>Training world</td><td>Seed 105</td></tr><tr><td>Episode budget, Generations 0–4</td><td>85 actions</td></tr><tr><td>Episode budget, Generations 5–7</td><td>200 actions</td></tr><tr><td>Gameplay model</td><td>Claude Haiku 4.5 on Amazon Bedrock</td></tr><tr><td>Meta-agent</td><td>Claude Opus 4.6 on Amazon Bedrock</td></tr><tr><td>Persistence</td><td>MongoDB Atlas</td></tr></tbody></table></div>
 <p>The gameplay model received a text observation of the world. It selected one allowlisted action at each step. The runner also captured rendered frames and produced a replay GIF.</p>
 <p>The meta-agent did not play Crafter. It only performed crossover and mutation. This separation kept task execution and evolutionary search in different model calls.</p>
 <p>Atlas used four collections. <code>harnesses</code> stored genomes and lineage. <code>runs</code> stored episode evidence. <code>metrics</code> stored generation scores. <code>ledger</code> stored configuration hashes.</p>
-<h3>4.3 Measurement protocol</h3>
+<h3>3.3 Measurement protocol</h3>
 <p>We compared candidates only within the same episode budget. Generations 0–4 form the controlled 85-action phase. Generations 5–7 form the 200-action phase.</p>
 <p>We did not run a paired held-out test. We therefore report training-world fitness and observed behavior. We do not report a generalization result.</p>
-<h2 id="5-results">5. Results</h2>
-<h3>5.1 Fitness over generations</h3>
+<h2 id="4-results">4. Results</h2>
+<h3>4.1 Fitness over generations</h3>
 <figure><img src="assets/score-by-generation.png" alt="Best and mean fitness by generation. The gap marks the change from 85 to 200 actions." loading="lazy"><figcaption>Best and mean fitness by generation. The gap marks the change from 85 to 200 actions.</figcaption></figure>
 <p>Generation 0 had a best score of 1.314 and a mean of 0.901. By Generation 2, best score reached 1.854. This was a 41.1% increase at the same 85-action budget.</p>
 <p>Best score stayed at 1.854 through Generation 4. Mean score reached 1.299 in Generation 4, a 44.2% increase from Generation 0.</p>
 <p>Generation 5 used 200 actions and reached 5.606. This jump includes a larger episode budget, so it is not evidence of a 202% evolutionary gain over Generation 4.</p>
 <p>Within the 200-action phase, best score remained 5.606. Mean score rose from 1.606 in Generation 5 to 2.740 in Generation 7. This was a 70.6% increase in population mean.</p>
 <p>The later generations improved population quality even though they did not find a better champion.</p>
-<h3>5.2 Lineage</h3>
+<h3>4.2 Lineage</h3>
 <section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage</h3><p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a parent-to-child connection.</p></aside></div></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
 <p>The lineage contains 80 evaluated harnesses. Pale edges show all parent links. The red path shows the ancestors that led to the final champion.</p>
 <p>Single-parent edges are elite copies. Two-parent edges are crossover children. This distinction prevents an inherited survivor from being described as a new crossover.</p>
 <p>Candidate <code>g2_00</code> is one clear crossover example. Its parents scored 1.314 and 0.876. One parent had concise survival rules. The other had a detailed technology plan.</p>
 <p>The crossover kept both traits. Mutation then added immediate stone mining, inventory checks, goal reassessment, and a larger history budget. The child scored 1.854.</p>
 <p>This child changed several fields. The result does not prove that one rule caused the gain. A rule-level ablation would be required for that claim.</p>
-<h3>5.3 Observed behavior</h3>
+<h3>4.3 Observed behavior</h3>
 <p>Recorded replay evidence is available for Generations 3–5. The following examples show three measured candidates on world seed 105.</p>
 <figure><img src="assets/generation-3-score-0.521.gif" alt="Generation 3 candidate g3_00. Score 0.521 with an 85-action budget." loading="lazy"><figcaption>Generation 3 candidate g3_00. Score 0.521 with an 85-action budget.</figcaption></figure>
 <p>Candidate <code>g3_00</code> collected wood and placed a table. It did not reach stone tools. Its behavior spent much of the episode near the start of the technology tree.</p>
@@ -171,17 +167,17 @@
 <figure><img src="assets/generation-5-score-5.606.gif" alt="Generation 5 candidate g5_02. Score 5.606 with a 200-action budget." loading="lazy"><figcaption>Generation 5 candidate g5_02. Score 5.606 with a 200-action budget.</figcaption></figure>
 <p>Candidate <code>g5_02</code> unlocked nine achievements. It collected wood, stone, coal, water, and a sapling. It made wooden and stone pickaxes and placed a table and furnace.</p>
 <p>The last replay has a larger action budget. The three videos show observed behavior, but they are not a controlled causal comparison.</p>
-<h3>5.4 Rule evolution</h3>
+<h3>4.4 Rule evolution</h3>
 <p>The rules became more specific as the meta-agent saw failures.</p>
 <div class="table-wrap"><table><thead><tr><th>Stage</th><th>Example policy change</th><th>Score</th></tr></thead><tbody><tr><td>Generation 0</td><td>“Collect wood before anything else.”</td><td>Best 1.314</td></tr><tr><td>Generation 2</td><td>Mine stone after the wooden pickaxe; check inventory; reassess the next goal.</td><td>1.854</td></tr><tr><td>Generation 4</td><td>Add step limits, milestone notes, and direct cave or downward search.</td><td>1.854</td></tr><tr><td>Generation 5</td><td>Add anti-stall thresholds, survival thresholds, and a 25-step history window.</td><td>5.606</td></tr></tbody></table></div>
 <p>The champion first appeared as <code>g5_02</code>. Elitism copied it to <code>g6_05</code> and then <code>g7_05</code>. The final two copies kept the same score and genome.</p>
 <p>The final policy was also imperfect. One rule claimed that stone was always two to four blocks below the surface. That statement may fit seed 105, but it is not a safe rule for unseen worlds.</p>
 <p>This is evidence of possible overfitting. Evolution can preserve a useful shortcut before it knows whether the shortcut generalizes.</p>
-<h3>5.5 Comparison with published Crafter results</h3>
+<h3>4.5 Comparison with published Crafter results</h3>
 <p>CrafterDojo reports 31.8 for its strongest prior baseline and 61.4 for its large behavioral-cloning model [8]. The official Crafter scoreboard also lists humans at 50.5 [9].</p>
 <p>Our score of 5.606 is much lower. It is also not directly comparable. Published results use different observations, training budgets, policies, and many evaluation episodes.</p>
 <p>Our run used one training world and at most 200 actions per episode. Its purpose was to test harness evolution, lineage, and replay, rather than establish a Crafter benchmark result.</p>
-<h2 id="6-conclusion">6. Conclusion</h2>
+<h2 id="5-conclusion">5. Conclusion</h2>
 <p>Harness Darwinism turned an agent harness into a searchable genome. Selection kept stronger policies. Crossover combined parents. Mutation used failure evidence. The system stored the complete history.</p>
 <p>At a fixed 85-action budget, best fitness improved by 41.1% and mean fitness improved by 44.2%. The longer 200-action phase reached 5.606 and improved mean fitness by 70.6% across three generations.</p>
 <p>The experiment had three main limits. It used one training world. It changed the action budget after Generation 4. It did not run a paired evaluation on unseen worlds.</p>
