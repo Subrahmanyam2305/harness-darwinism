@@ -2,16 +2,6 @@
 
 **Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam**
 
-## Abstract
-
-Harness Darwinism treats an agent harness as a genome. It applies selection, crossover, and mutation while keeping the gameplay model fixed.
-
-Each harness was a genome. Its genes were the prompt, rules, memory policy, tools, and context budget. Ten genomes played Crafter. The best five survived. A meta-agent bred five children.
-
-At a fixed budget of 85 actions, best fitness rose by 41.1%. Mean fitness rose by 44.2%. A later 200-action phase reached a training score of 5.606 and nine unlocked achievements.
-
-The experiment used one training world. It did not include held-out evaluation. The result shows a working evolution loop and a measurable training gain. It does not show generalization.
-
 ## 1. Introduction
 
 As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve recursively as they gathered evidence in an unfamiliar environment.

@@ -195,7 +195,6 @@ def build() -> None:
     p {{ margin:0 0 18px; }}
     article > p:first-child {{ font-size:19px; line-height:1.7; }}
     h2 {{ margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:var(--accent); font-size:22px; line-height:1.35; }}
-    #abstract {{ margin-top:0; }}
     h3 {{ margin:30px 0 10px; font-size:17px; }}
     ul, ol {{ margin:0 0 20px 24px; padding:0; }}
     li {{ margin:7px 0; padding-left:4px; }}

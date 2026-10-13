@@ -22,7 +22,6 @@
     p { margin:0 0 18px; }
     article > p:first-child { font-size:19px; line-height:1.7; }
     h2 { margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:var(--accent); font-size:22px; line-height:1.35; }
-    #abstract { margin-top:0; }
     h3 { margin:30px 0 10px; font-size:17px; }
     ul, ol { margin:0 0 20px 24px; padding:0; }
     li { margin:7px 0; padding-left:4px; }
@@ -81,12 +80,7 @@
       <h1>Harness Darwinism: Evolving Agent Harnesses with Genetic Algorithms</h1>
       <div class="byline">Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam</div>
     </header>
-    <article><h2 id="abstract">Abstract</h2>
-<p>Harness Darwinism treats an agent harness as a genome. It applies selection, crossover, and mutation while keeping the gameplay model fixed.</p>
-<p>Each harness was a genome. Its genes were the prompt, rules, memory policy, tools, and context budget. Ten genomes played Crafter. The best five survived. A meta-agent bred five children.</p>
-<p>At a fixed budget of 85 actions, best fitness rose by 41.1%. Mean fitness rose by 44.2%. A later 200-action phase reached a training score of 5.606 and nine unlocked achievements.</p>
-<p>The experiment used one training world. It did not include held-out evaluation. The result shows a working evolution loop and a measurable training gain. It does not show generalization.</p>
-<h2 id="1-introduction">1. Introduction</h2>
+    <article><h2 id="1-introduction">1. Introduction</h2>
 <p>As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve recursively as they gathered evidence in an unfamiliar environment.</p>
 <p>Many agent systems approach this problem by storing past trials and trajectories in external memory. They retrieve relevant evidence into working context when similar tasks appear. The model weights stay fixed, but each attempt starts with better evidence.</p>
 <p>This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?</p>
