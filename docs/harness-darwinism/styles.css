@@ -18,6 +18,10 @@
     pre { overflow:auto; margin:24px 0; padding:22px; border:1px solid #2c3334; border-radius:4px; background:#172123; color:#e7efeb; font-size:13px; line-height:1.65; }
     pre code { padding:0; background:none; color:inherit; }
     a { color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }
+    .citation { padding-left:2px; font-size:.75em; white-space:nowrap; }
+    .citation a { margin-left:2px; text-decoration:none; }
+    .references li { scroll-margin-top:18px; }
+    .ref-backlink { margin-left:5px; text-decoration:none; }
     .table-wrap { overflow-x:auto; margin:22px 0 28px; }
     table { width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }
     caption { padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:center; caption-side:top; }

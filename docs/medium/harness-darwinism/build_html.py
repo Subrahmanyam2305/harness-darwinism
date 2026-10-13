@@ -13,6 +13,17 @@ ROOT = Path(__file__).resolve().parent
 def inline(text: str) -> str:
     """Render the small inline Markdown subset used by the article."""
     escaped = html.escape(text, quote=False)
+
+    def citation_links(match: re.Match[str]) -> str:
+        start = int(match.group(1))
+        end = int(match.group(2) or start)
+        links = "".join(
+            f'<a id="cite-{number}" href="#ref-{number}">[{number}]</a>'
+            for number in range(start, end + 1)
+        )
+        return f'<sup class="citation">{links}</sup>'
+
+    escaped = re.sub(r"\[(\d+)(?:[–-](\d+))?\]", citation_links, escaped)
     escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
     escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
     escaped = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", escaped)
@@ -43,6 +54,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
     in_code = False
     code_lines: list[str] = []
     code_language = ""
+    references_section = False
 
     def flush_paragraph() -> None:
         if paragraph:
@@ -52,8 +64,17 @@ def render_markdown(source: str) -> tuple[str, str, str]:
     def flush_list() -> None:
         nonlocal list_tag
         if list_tag:
-            items = "".join(f"<li>{inline(item)}</li>" for item in list_items)
-            out.append(f"<{list_tag}>{items}</{list_tag}>")
+            if references_section and list_tag == "ol":
+                items = "".join(
+                    f'<li id="ref-{number}">{inline(item)} '
+                    f'<a class="ref-backlink" href="#cite-{number}" '
+                    f'aria-label="Return to citation {number}">↩</a></li>'
+                    for number, item in enumerate(list_items, start=1)
+                )
+                out.append(f'<ol class="references">{items}</ol>')
+            else:
+                items = "".join(f"<li>{inline(item)}</li>" for item in list_items)
+                out.append(f"<{list_tag}>{items}</{list_tag}>")
             list_items.clear()
             list_tag = None
 
@@ -164,6 +185,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
         elif stripped.startswith("## "):
             flush_paragraph()
             heading = stripped[3:]
+            references_section = heading == "References"
             section_id = re.sub(r"[^a-z0-9]+", "-", heading.lower()).strip("-")
             out.append(f'<h2 id="{section_id}">{inline(heading)}</h2>')
         elif stripped.startswith("> "):
@@ -218,6 +240,10 @@ def build() -> None:
     pre {{ overflow:auto; margin:24px 0; padding:22px; border:1px solid #2c3334; border-radius:4px; background:#172123; color:#e7efeb; font-size:13px; line-height:1.65; }}
     pre code {{ padding:0; background:none; color:inherit; }}
     a {{ color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }}
+    .citation {{ padding-left:2px; font-size:.75em; white-space:nowrap; }}
+    .citation a {{ margin-left:2px; text-decoration:none; }}
+    .references li {{ scroll-margin-top:18px; }}
+    .ref-backlink {{ margin-left:5px; text-decoration:none; }}
     .table-wrap {{ overflow-x:auto; margin:22px 0 28px; }}
     table {{ width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }}
     caption {{ padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:center; caption-side:top; }}
