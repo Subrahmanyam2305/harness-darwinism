@@ -4,7 +4,7 @@
 
 ## Abstract
 
-We built Harness Darwinism during a three-person hackathon. The task was to build a recursively self-improving agent. We kept the gameplay model fixed and evolved the harness around it.
+Harness Darwinism treats an agent harness as a genome. It applies selection, crossover, and mutation while keeping the gameplay model fixed.
 
 Each harness was a genome. Its genes were the prompt, rules, memory policy, tools, and context budget. Ten genomes played Crafter. The best five survived. A meta-agent bred five children.
 
@@ -14,11 +14,11 @@ The experiment used one training world. It did not include held-out evaluation. 
 
 ## 1. Introduction
 
-The hackathon task asked us to build a recursively self-improving agent. The system had to learn from experience and improve the software around the model.
-
 Many agent systems store past trials in a separate memory. They retrieve useful lessons into working context when a similar task appears. The model weights stay fixed, but the next attempt receives better evidence.
 
-We wanted to take this idea one step further. If an agent can inherit memories, why can it not inherit a better harness?
+This raises a broader question: if an agent can inherit memories, can it also inherit a better harness?
+
+The project began during the Harness Engineering and Model Wrangling Hackathon. We used its recursive self-improvement theme to test this question in Crafter.
 
 We treated the harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by one agent. A population of genomes competed on the same task.
 
@@ -54,7 +54,7 @@ The next population contains survivors and children. Repeating this cycle search
 
 ### 3.2 Our method
 
-In Harness Darwinism, one DNA strand is one agent harness. The genome contains fields that the evolution loop can change and validate.
+In Harness Darwinism, each agent harness is represented as one genome. The genome contains fields that the evolution loop can change and validate.
 
 ```json
 {
@@ -194,7 +194,7 @@ This child changed several fields. The result does not prove that one rule cause
 
 ### 5.3 Observed behavior
 
-Recording began at Generation 3. The following replays show three measured candidates on world seed 105.
+Recorded replay evidence is available for Generations 3–5. The following examples show three measured candidates on world seed 105.
 
 ![Generation 3 candidate g3_00. Score 0.521 with an 85-action budget.](assets/generation-3-score-0.521.gif)
 
@@ -249,9 +249,9 @@ The starter rules also limited the search. A stronger initial population could i
 
 The next study should use several shared training seeds. It should freeze the champion, compare it with the initial harness on paired held-out seeds, and remove one evolved rule at a time.
 
-We did not reach the published Crafter scores. We did show that a fixed model can produce better training behavior when the harness becomes the object of evolution.
+The experiment did not reach the published Crafter scores. It showed that a fixed model can produce better training behavior when the harness becomes the object of evolution.
 
-The final lesson was simple. Generating another prompt is easy. Keeping enough evidence to know whether that prompt is better is the hard part.
+The experiment also exposed an evaluation requirement. Generating another prompt is easy. Retaining enough evidence to determine whether that prompt is better is harder.
 
 ## References
 
@@ -262,4 +262,3 @@ The final lesson was simple. Generating another prompt is easy. Keeping enough e
 5. Jenny Zhang et al. [Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents](https://arxiv.org/abs/2505.22954), 2025.
 6. Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. [CrafterDojo](https://arxiv.org/abs/2508.13530), 2025.
 7. Danijar Hafner. [Crafter repository and official scoreboard](https://github.com/danijar/crafter), accessed October 2026.
-8. Cerebral Valley. [The Harness Engineering and Model Wrangling Hackathon](https://cerebralvalley.ai/e/mongodb-sftw-hackathon), 2026.
