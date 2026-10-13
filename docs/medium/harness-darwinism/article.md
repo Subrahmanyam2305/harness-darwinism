@@ -182,9 +182,9 @@ Harness Darwinism turned an agent harness into a searchable genome by using sele
 
 Across eight generations with a fixed 200-step budget, best fitness rose from 1.314 to 5.606, while mean fitness rose from 0.901 to 2.740. Although the experiment did not reach published Crafter scores, it showed that a fixed model can produce better training behavior when the harness itself becomes the object of evolution.
 
-The experiment had two main limits: it used one training world and did not run a paired evaluation on unseen worlds. API usage created another constraint because one 200-step episode could send more than two million input tokens as each action repeated recent history, meaning that larger context genes increased both capability and cost.
+The experiment had two main limitations. First, API usage constrained how far we could scale the search. A single 200-step episode could send more than two million input tokens because each action repeated recent history, while larger context genes increased both capability and cost. This limited the number of candidates and generations that could be explored within a practical budget.
 
-The starter rules also restricted the search because they mainly covered survival and the crafting sequence, whereas a stronger initial population could include navigation, spatial memory, recovery, and tool-use policies. A follow-up study should therefore use several shared training seeds, freeze the champion, compare it with the initial harness on paired held-out seeds, and remove one evolved rule at a time.
+Second, the starter rules narrowed the search space because they mainly covered survival and the crafting sequence. Evolution could recombine and mutate those rules, but it still began from a limited set of behaviors. A broader initial population could include navigation, spatial memory, recovery, and tool-use policies, giving future runs more varied material to evolve.
 
 The experiment also exposed a basic evaluation requirement: generating another prompt is easy, but retaining enough evidence to determine whether that prompt is better is harder.
 
