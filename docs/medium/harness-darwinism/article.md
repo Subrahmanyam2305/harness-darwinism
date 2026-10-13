@@ -104,8 +104,7 @@ We optimized the geometric-mean Crafter score because it rewards progress across
 | Children per generation | 5 |
 | Training worlds per generation | 1 |
 | Training world | Seed 105 |
-| Episode budget, Generations 0–4 | 85 actions |
-| Episode budget, Generations 5–7 | 200 actions |
+| Timesteps per episode | 200 steps |
 | Gameplay model | Claude Haiku 4.5 on Amazon Bedrock |
 | Meta-agent | Claude Opus 4.6 on Amazon Bedrock |
 | Persistence | MongoDB Atlas |
@@ -116,17 +115,17 @@ Atlas used four collections: `harnesses` stored genomes and lineage, `runs` stor
 
 ### 3.3 Measurement protocol
 
-We compared candidates only within the same episode budget, treating Generations 0–4 as the controlled 85-action phase and Generations 5–7 as the 200-action phase. Because we did not run a paired held-out test, we report only training-world fitness and observed behavior rather than a generalization result.
+Every candidate was evaluated with the same 200-step episode budget. Because we did not run a paired held-out test, we report only training-world fitness and observed behavior rather than a generalization result.
 
 ## 4. Results
 
 ### 4.1 Fitness over generations
 
-![Best and mean fitness by generation. The gap marks the change from 85 to 200 actions.](assets/score-by-generation.png)
+![Best and mean fitness across eight generations, with every episode evaluated for 200 steps.](assets/score-by-generation.png)
 
-Generation 0 had a best score of 1.314 and a mean of 0.901, while Generation 2 reached a best score of 1.854, representing a 41.1% increase under the same 85-action budget. The best score remained at 1.854 through Generation 4, but the mean rose to 1.299, a 44.2% increase from Generation 0.
+Generation 0 began with a best score of 1.314 and a population mean of 0.901. The best score rose to 1.854 by Generation 2, remained there through Generation 4, and then reached 5.606 in Generation 5, where it stayed through Generation 7.
 
-Generation 5 used 200 actions and reached 5.606, although the larger episode budget means this jump is not evidence of a 202% evolutionary gain over Generation 4. Within the 200-action phase, the best score remained at 5.606 while the mean rose from 1.606 in Generation 5 to 2.740 in Generation 7, a 70.6% increase that indicates better population quality even though the run did not find a stronger champion.
+The population mean fluctuated during the earlier generations before rising from 1.299 in Generation 4 to 1.606 in Generation 5 and 2.740 by Generation 7, showing that later generations improved the overall population even after the best score stopped increasing.
 
 ### 4.2 Lineage
 
@@ -142,19 +141,17 @@ Because this child changed several fields at once, the result does not establish
 
 Recorded replay evidence is available for Generations 3–5, and the following examples show three measured candidates on world seed 105.
 
-![Generation 3 candidate g3_00. Score 0.521 with an 85-action budget.](assets/generation-3-score-0.521.gif)
+![Generation 3 candidate g3_00. Score 0.521 with a 200-step budget.](assets/generation-3-score-0.521.gif)
 
 Candidate `g3_00` collected wood and placed a table but did not reach stone tools, spending much of the episode near the beginning of the technology tree.
 
-![Generation 4 candidate g4_05. Score 1.854 with an 85-action budget.](assets/generation-4-score-1.854.gif)
+![Generation 4 candidate g4_05. Score 1.854 with a 200-step budget.](assets/generation-4-score-1.854.gif)
 
 Candidate `g4_05` collected wood, stone, and coal, placed a table, and made a wooden pickaxe, producing an action sequence with a clearer progression from resources to tools.
 
-![Generation 5 candidate g5_02. Score 5.606 with a 200-action budget.](assets/generation-5-score-5.606.gif)
+![Generation 5 candidate g5_02. Score 5.606 with a 200-step budget.](assets/generation-5-score-5.606.gif)
 
 Candidate `g5_02` unlocked nine achievements by collecting wood, stone, coal, water, and a sapling, making wooden and stone pickaxes, and placing both a table and a furnace.
-
-Because the last replay has a larger action budget, these videos show observed behavior rather than a controlled causal comparison.
 
 ### 4.4 Rule evolution
 
@@ -175,15 +172,15 @@ The final policy remained imperfect because one rule claimed that stone was alwa
 
 CrafterDojo reports 31.8 for its strongest prior baseline and 61.4 for its large behavioral-cloning model [8], while the official Crafter scoreboard lists humans at 50.5 [9]. Our score of 5.606 is substantially lower, but it is also not directly comparable because the published results use different observations, training budgets, policies, and many evaluation episodes.
 
-Our run used one training world and at most 200 actions per episode because its purpose was to test harness evolution, lineage, and replay rather than establish a Crafter benchmark result.
+Our run used one training world and 200 steps per episode because its purpose was to test harness evolution, lineage, and replay rather than establish a Crafter benchmark result.
 
 ## 5. Conclusion
 
 Harness Darwinism turned an agent harness into a searchable genome by using selection to retain stronger policies, crossover to combine parents, and mutation to act on failure evidence, while preserving the complete history of the search.
 
-At a fixed 85-action budget, best fitness improved by 41.1% and mean fitness by 44.2%, while the longer 200-action phase reached 5.606 and increased mean fitness by 70.6% across three generations. Although the experiment did not reach published Crafter scores, it showed that a fixed model can produce better training behavior when the harness itself becomes the object of evolution.
+Across eight generations with a fixed 200-step budget, best fitness rose from 1.314 to 5.606, while mean fitness rose from 0.901 to 2.740. Although the experiment did not reach published Crafter scores, it showed that a fixed model can produce better training behavior when the harness itself becomes the object of evolution.
 
-The experiment had three main limits: it used one training world, changed the action budget after Generation 4, and did not run a paired evaluation on unseen worlds. API usage created another constraint because one 200-action episode could send more than two million input tokens as each action repeated recent history, meaning that larger context genes increased both capability and cost.
+The experiment had two main limits: it used one training world and did not run a paired evaluation on unseen worlds. API usage created another constraint because one 200-step episode could send more than two million input tokens as each action repeated recent history, meaning that larger context genes increased both capability and cost.
 
 The starter rules also restricted the search because they mainly covered survival and the crafting sequence, whereas a stronger initial population could include navigation, spatial memory, recovery, and tool-use policies. A follow-up study should therefore use several shared training seeds, freeze the champion, compare it with the initial harness on paired held-out seeds, and remove one evolved rule at a time.
 

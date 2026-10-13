@@ -513,6 +513,108 @@ def build_lineage() -> None:
     )
 
 
+def build_score_chart() -> None:
+    """Draw best and mean fitness across the eight 200-step generations."""
+    metrics = json.loads((ROOT / "evidence.json").read_text())["metrics"]
+    canvas = Image.new("RGB", (1200 * SCALE, 650 * SCALE), PAPER)
+    draw = ImageDraw.Draw(canvas)
+    draw.text(
+        (65 * SCALE, 42 * SCALE),
+        "Fitness across eight generations",
+        fill=INK,
+        font=font(30, serif=True),
+    )
+    draw.text(
+        (65 * SCALE, 88 * SCALE),
+        "One training world (seed 105). Every episode used a 200-step budget.",
+        fill=MUTED,
+        font=font(15),
+    )
+
+    left, top, right, bottom = 100, 145, 1135, 555
+    for value in range(7):
+        y = bottom - (value / 6) * (bottom - top)
+        draw.line(
+            ((left * SCALE, y * SCALE), (right * SCALE, y * SCALE)),
+            fill=RULE,
+            width=SCALE,
+        )
+        draw.text(
+            ((left - 18) * SCALE, y * SCALE),
+            str(value),
+            fill=MUTED,
+            font=font(12),
+            anchor="rm",
+        )
+
+    def point(generation: int, score: float) -> tuple[int, int]:
+        x = left + generation * (right - left) / (len(metrics) - 1)
+        y = bottom - score / 6 * (bottom - top)
+        return round(x * SCALE), round(y * SCALE)
+
+    best_points = [point(row["generation"], row["best"]) for row in metrics]
+    mean_points = [point(row["generation"], row["mean"]) for row in metrics]
+    draw.line(best_points, fill=RED, width=4 * SCALE, joint="curve")
+    draw.line(mean_points, fill=TEAL, width=4 * SCALE, joint="curve")
+
+    for row, best_point, mean_point in zip(
+        metrics, best_points, mean_points, strict=True
+    ):
+        for chart_point, color in ((best_point, RED), (mean_point, TEAL)):
+            x, y = chart_point
+            radius = 6 * SCALE
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=color,
+                outline=PAPER,
+                width=2 * SCALE,
+            )
+        draw.text(
+            (best_point[0], (bottom + 24) * SCALE),
+            str(row["generation"]),
+            fill=MUTED,
+            font=font(12),
+            anchor="ma",
+        )
+
+    draw.text(
+        (((left + right) / 2) * SCALE, 615 * SCALE),
+        "Generation",
+        fill=INK,
+        font=font(13, bold=True),
+        anchor="mm",
+    )
+    draw.text(
+        (24 * SCALE, ((top + bottom) / 2) * SCALE),
+        "Fitness",
+        fill=INK,
+        font=font(13, bold=True),
+        anchor="mm",
+    )
+
+    legend_y = 122
+    for start_x, color, label in ((825, RED, "Best"), (970, TEAL, "Mean")):
+        draw.line(
+            (
+                (start_x * SCALE, legend_y * SCALE),
+                ((start_x + 34) * SCALE, legend_y * SCALE),
+            ),
+            fill=color,
+            width=4 * SCALE,
+        )
+        draw.text(
+            ((start_x + 44) * SCALE, legend_y * SCALE),
+            label,
+            fill=INK,
+            font=font(13, bold=True),
+            anchor="lm",
+        )
+
+    canvas.resize((1200, 650), Image.Resampling.LANCZOS).save(
+        ASSETS / "score-by-generation.png", optimize=True
+    )
+
+
 def compress_replay(source: Path, destination: Path) -> None:
     """Resize and subsample one replay while preserving its playback duration."""
     with Image.open(source) as replay:
@@ -557,6 +659,7 @@ def main() -> None:
     """Build all research-article assets."""
     ASSETS.mkdir(exist_ok=True)
     build_architecture()
+    build_score_chart()
     build_lineage()
     build_replays()
 

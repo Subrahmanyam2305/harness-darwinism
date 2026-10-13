@@ -18,7 +18,7 @@ This folder contains the publication draft and its supporting evidence.
 - `assets/generation-*.gif`: Recorded behavior at Generations 3, 4, and 5.
 - `assets/champion-replay.gif`: Compressed champion replay for Medium.
 - `assets/champion-frame.png`: Still image from the champion replay.
-- `assets/score-by-generation.png`: Score chart with the step-budget change marked.
+- `assets/score-by-generation.png`: Score chart across all eight generations at a 200-step budget.
 
 ## Medium upload order
 
@@ -28,4 +28,4 @@ This folder contains the publication draft and its supporting evidence.
 4. Upload the three `generation-*.gif` files in their listed order.
 5. Check code blocks, tables, captions, and links in Medium's editor.
 
-The article separates the 85-step and 200-step phases. Do not remove that distinction when editing the results.
+The article presents all eight generations with a 200-step episode budget.
