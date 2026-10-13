@@ -248,7 +248,6 @@ def build() -> None:
     .parent-card {{ margin:8px 0; padding:10px; border:1px solid var(--rule); background:#fff; }}
     .parent-card strong {{ display:block; overflow-wrap:anywhere; color:var(--teal); }}
     .lineage-caption {{ margin:0; padding:10px 20px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; line-height:1.55; text-align:center; }}
-    footer {{ padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }}
     @media (max-width:700px) {{
       .paper {{ width:100%; margin:0; box-shadow:none; }}
       .masthead, article {{ padding-left:22px; padding-right:22px; }}
@@ -256,7 +255,6 @@ def build() -> None:
       figure {{ margin-left:0; margin-right:0; }}
       .lineage-explorer {{ width:100%; }}
       .lineage-detail {{ max-height:none; }}
-      footer {{ padding-left:22px; padding-right:22px; }}
     }}
     @media print {{ body {{ background:#fff; }} .paper {{ width:100%; margin:0; box-shadow:none; }} .progress {{ display:none; }} }}
   </style>
@@ -268,7 +266,6 @@ def build() -> None:
       <h1>{html.escape(title)}</h1>
     </header>
     <article>{body}</article>
-    <footer>Research report prepared from Atlas experiment records and recorded Crafter episodes. Training world: seed 105.</footer>
   </main>
   <script id="lineage-data" type="application/json">{lineage_json}</script>
   <script>
