@@ -81,17 +81,13 @@
       <div class="byline">Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam</div>
     </header>
     <article><h2 id="1-introduction">1. Introduction</h2>
-<p>As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve across repeated attempts without changing their weights.</p>
-<p>Prior work has treated external memory as one way to support this form of adaptation. Generative Agents stores a natural-language record of experience, creates higher-level reflections, and retrieves relevant memories for planning [2].</p>
-<p>Reflexion turns task feedback into verbal reflections and stores them in episodic memory for later attempts [3]. ExpeL extracts reusable insights from successful and failed trajectories, then retrieves them during inference [4].</p>
-<p>Voyager stores successful behaviors as executable skills and retrieves them for new tasks [5]. In each system, the model stays fixed while the information or capabilities supplied to the next attempt improve.</p>
-<p>This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?</p>
-<p>The project began during the Harness Engineering and Model Wrangling Hackathon. We used its recursive self-improvement theme to test this question in Crafter.</p>
-<p>We treated the harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by one agent. A population of genomes competed on the same task.</p>
-<p>The environment supplied a fitness score. High-scoring genomes survived. A second model combined two parents and made one mutation based on their failures.</p>
-<p>We call this system <strong>Harness Darwinism</strong>. It applies a genetic algorithm to recursive harness improvement while the underlying gameplay model remains fixed.</p>
+<p>As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve across repeated attempts without changing their weights.</p>
+<p>Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose Harness Darwinism, an evolutionary framework for studying harness evolution as a form of recursive self-improvement.</p>
+<p>We treated each harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by an agent. A population of these genomes then competed on the same task.</p>
+<p>The environment supplied the fitness score used to rank them. High-scoring genomes survived, while a second model combined two parents and applied one mutation based on their failures.</p>
+<p>Harness Darwinism applies this genetic algorithm to recursive harness improvement while keeping the underlying gameplay model fixed.</p>
 <p>Our experiment ran for eight generations in Crafter. We used ten candidates per generation, retained five elites, and produced five children through crossover and mutation.</p>
-<p>Within the controlled 85-action phase, best score increased from 1.314 to 1.854. The 200-action phase later reached 5.606, but that phase cannot be compared directly with the shorter episodes.</p>
+<p>Within the controlled 85-action phase, the best score increased from 1.314 to 1.854. The later 200-action phase reached 5.606, although it cannot be compared directly with the shorter episodes.</p>
 <h2 id="2-related-work">2. Related Work</h2>
 <p>Generative Agents retrieves observations and synthesized reflections for planning [2]. Reflexion stores verbal feedback in episodic memory [3]. ExpeL extracts lessons from prior tasks and recalls them later [4].</p>
 <p>Voyager stores and retrieves executable skills rather than raw trajectories [5]. These systems improve future decisions without changing model weights. Our method changes the harness itself.</p>

@@ -4,27 +4,19 @@
 
 ## 1. Introduction
 
-As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve across repeated attempts without changing their weights.
+As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve across repeated attempts without changing their weights.
 
-Prior work has treated external memory as one way to support this form of adaptation. Generative Agents stores a natural-language record of experience, creates higher-level reflections, and retrieves relevant memories for planning [2].
+Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose Harness Darwinism, an evolutionary framework for studying harness evolution as a form of recursive self-improvement.
 
-Reflexion turns task feedback into verbal reflections and stores them in episodic memory for later attempts [3]. ExpeL extracts reusable insights from successful and failed trajectories, then retrieves them during inference [4].
+We treated each harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by an agent. A population of these genomes then competed on the same task.
 
-Voyager stores successful behaviors as executable skills and retrieves them for new tasks [5]. In each system, the model stays fixed while the information or capabilities supplied to the next attempt improve.
+The environment supplied the fitness score used to rank them. High-scoring genomes survived, while a second model combined two parents and applied one mutation based on their failures.
 
-This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?
-
-The project began during the Harness Engineering and Model Wrangling Hackathon. We used its recursive self-improvement theme to test this question in Crafter.
-
-We treated the harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by one agent. A population of genomes competed on the same task.
-
-The environment supplied a fitness score. High-scoring genomes survived. A second model combined two parents and made one mutation based on their failures.
-
-We call this system **Harness Darwinism**. It applies a genetic algorithm to recursive harness improvement while the underlying gameplay model remains fixed.
+Harness Darwinism applies this genetic algorithm to recursive harness improvement while keeping the underlying gameplay model fixed.
 
 Our experiment ran for eight generations in Crafter. We used ten candidates per generation, retained five elites, and produced five children through crossover and mutation.
 
-Within the controlled 85-action phase, best score increased from 1.314 to 1.854. The 200-action phase later reached 5.606, but that phase cannot be compared directly with the shorter episodes.
+Within the controlled 85-action phase, the best score increased from 1.314 to 1.854. The later 200-action phase reached 5.606, although it cannot be compared directly with the shorter episodes.
 
 ## 2. Related Work
 
