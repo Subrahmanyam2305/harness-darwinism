@@ -138,6 +138,115 @@ h1 {
 }
 .section-nav a:hover { color: var(--cyan); background: var(--cyan-soft); }
 
+.evolution-atlas {
+  padding: 44px 50px 54px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface-soft);
+  scroll-margin-top: 54px;
+}
+.atlas-heading { max-width: 760px; }
+.atlas-heading .eyebrow { margin-bottom: 8px; color: var(--cyan); }
+.atlas-heading h2 {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  font-size: clamp(25px, 4vw, 38px);
+  line-height: 1.12;
+}
+.atlas-heading p:last-child { max-width: 720px; margin-bottom: 28px; color: var(--muted); }
+.generation-atlas {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(128px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 12px;
+}
+.generation-card {
+  min-width: 128px;
+  min-height: 190px;
+  padding: 15px 14px 13px;
+  border: 1px solid var(--rule);
+  border-top: 4px solid var(--cyan);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.generation-card:hover,
+.generation-card:focus-visible {
+  border-color: var(--cyan);
+  box-shadow: 0 8px 20px rgba(16, 43, 59, .12);
+  outline: none;
+  transform: translateY(-2px);
+}
+.generation-card.has-gain { border-top-color: var(--orange); }
+.generation-card.is-active {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+.generation-card-header,
+.generation-statistics {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.generation-card-header { align-items: flex-start; }
+.generation-label {
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+.generation-phase {
+  color: var(--muted);
+  font-size: 9px;
+  text-align: right;
+  text-transform: uppercase;
+}
+.generation-score { display: block; margin: 27px 0 20px; }
+.generation-score small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+.generation-score strong { display: block; margin-top: 3px; font-size: 25px; line-height: 1; }
+.generation-statistics { color: var(--muted); font-size: 9px; }
+.generation-operation {
+  display: block;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  color: var(--cyan);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.generation-card.is-active .generation-label,
+.generation-card.is-active .generation-operation { color: #83c9d7; }
+.generation-card.is-active .generation-phase,
+.generation-card.is-active .generation-score small,
+.generation-card.is-active .generation-statistics { color: #b8cbd4; }
+.generation-card.is-active .generation-operation { border-color: rgba(255, 255, 255, .18); }
+.atlas-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin: 5px 0 26px;
+  color: var(--muted);
+  font: 500 10px/1.4 "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+.atlas-key span { display: inline-flex; align-items: center; gap: 7px; }
+.key-swatch { width: 18px; height: 4px; background: var(--cyan); }
+.key-gain { background: var(--orange); }
+.key-selected { background: var(--navy); }
+
 article { max-width: 900px; margin: 0 auto; padding: 36px 48px 80px; }
 p { margin: 0 0 20px; }
 article > p:first-of-type { font-size: 20px; line-height: 1.6; }
@@ -216,8 +325,8 @@ figcaption,
 }
 
 .lineage-explorer {
-  width: calc(100% + 76px);
-  margin: 42px -38px;
+  width: 100%;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--rule);
   background: var(--surface);
@@ -275,10 +384,13 @@ figcaption,
   .metric-strip div { min-height: 82px; }
   .metric-strip .metric-primary { grid-column: 1 / -1; }
   .section-nav { padding: 9px 14px; }
+  .evolution-atlas { padding: 34px 22px 42px; }
+  .generation-atlas { grid-template-columns: repeat(8, 142px); margin-right: -22px; }
+  .atlas-key { margin-bottom: 20px; }
   article { padding: 18px 22px 60px; }
   h2 { margin-top: 50px; }
   figure { margin-left: 0; margin-right: 0; padding: 10px; }
-  .lineage-explorer { width: 100%; margin-left: 0; margin-right: 0; }
+  .lineage-explorer { width: 100%; }
   .lineage-detail { max-height: none; }
 }
 

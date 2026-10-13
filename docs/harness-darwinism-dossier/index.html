@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="An experiment dossier on evolving an LLM agent harness with genetic algorithms in Crafter.">
-  <title>Harness Darwinism — Experiment Dossier</title>
+  <meta name="description" content="An evolution atlas tracing eight generations of LLM agent harnesses in Crafter.">
+  <title>Harness Darwinism — Evolution Atlas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,9 +16,9 @@
     <header class="dossier-header">
       <div class="header-row">
         <div class="header-copy">
-          <p class="eyebrow">Experiment dossier · HD-08</p>
+          <p class="eyebrow">Evolution atlas · HD-08</p>
           <h1>Harness Darwinism</h1>
-          <p class="subtitle">Evolving agent harnesses with genetic algorithms</p>
+          <p class="subtitle">A generation-by-generation record of evolving agent harnesses</p>
         </div>
         <div class="status-block">
           <span>Run status</span>
@@ -34,6 +34,7 @@
       </dl>
     </header>
     <nav class="section-nav" aria-label="Article sections">
+      <a href="#evolution-atlas">Atlas</a>
       <a href="#1-introduction">Introduction</a>
       <a href="#2-methodology">Methodology</a>
       <a href="#3-experiments">Experiment</a>
@@ -41,6 +42,20 @@
       <a href="#5-conclusion">Conclusion</a>
       <a href="#references">References</a>
     </nav>
+    <section class="evolution-atlas" id="evolution-atlas" aria-labelledby="atlas-title">
+      <div class="atlas-heading">
+        <p class="eyebrow">Generation map</p>
+        <h2 id="atlas-title">Eight generations of harness evolution</h2>
+        <p>Each card shows the strongest harness and the population mean for one generation. Select a generation to inspect its best candidate, parents, crossover output, mutation, and final genome in the lineage graph.</p>
+      </div>
+      <div class="generation-atlas" id="generation-atlas" aria-label="Best and mean fitness across eight generations"></div>
+      <div class="atlas-key" aria-label="Evolution atlas legend">
+        <span><i class="key-swatch key-baseline"></i>Generation record</span>
+        <span><i class="key-swatch key-gain"></i>New best score</span>
+        <span><i class="key-swatch key-selected"></i>Selected generation</span>
+      </div>
+      <section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage graph</h3><p>Click any generation, candidate, or connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a generation or parent-to-child connection.</p></aside></div><p class="lineage-caption">Figure 1: Interactive evolution atlas and lineage graph.</p></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Figure 1: Lineage graph of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
+    </section>
     <article><h2 id="1-introduction">1. Introduction</h2>
 <p>As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve performance across repeated attempts without changing their weights.</p>
 <p>Prior work has treated external memory as one way to support this form of adaptation <sup class="citation"><a id="cite-2" href="#ref-2">[2]</a><a id="cite-3" href="#ref-3">[3]</a><a id="cite-4" href="#ref-4">[4]</a><a id="cite-5" href="#ref-5">[5]</a></sup>, but few have explored agentic memory through an evolutionary lens <sup class="citation"><a id="cite-7" href="#ref-7">[7]</a></sup>. In this work, we propose <strong>Harness Darwinism</strong>, a framework for studying harness evolution as a form of recursive self-improvement.</p>
@@ -67,7 +82,7 @@
     &quot;history_steps&quot;: 10
   }
 }</code></pre>
-<figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence." loading="lazy"><figcaption>Figure 1: System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.</figcaption></figure>
+<figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence." loading="lazy"><figcaption>Figure 2: System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.</figcaption></figure>
 <h3>2.3 Initialization</h3>
 <p>Generation <b>0</b> begins with <b>10</b> hand-written rules covering resource collection, tool crafting, health, water, sleep, combat, and furnace construction, and each initial genome received a random subset of one to five of those rules.</p>
 <h3>2.4 Fitness function</h3>
@@ -90,11 +105,10 @@
 
 <h2 id="4-results">4. Results</h2>
 <h3>4.1 Fitness over generations</h3>
-<figure><img src="assets/score-by-generation.png" alt="Best and mean fitness across eight generations, with every episode evaluated for 200 steps." loading="lazy"><figcaption>Figure 2: Best and mean fitness across eight generations, with every episode evaluated for <b>200</b> steps.</figcaption></figure>
+<figure><img src="assets/score-by-generation.png" alt="Best and mean fitness across eight generations, with every episode evaluated for 200 steps." loading="lazy"><figcaption>Figure 3: Best and mean fitness across eight generations, with every episode evaluated for <b>200</b> steps.</figcaption></figure>
 <p>Generation <b>0</b> began with a best score of <b>1.314</b> and a population mean of <b>0.901</b>. The best score rose to <b>1.854</b> by Generation <b>2</b>, remained there through Generation <b>4</b>, and then reached <b>5.7</b> in Generation <b>5</b>, where it stayed through Generation <b>7</b>.</p>
 <p>The population mean fluctuated during the earlier generations before rising from <b>1.299</b> in Generation <b>4</b> to <b>1.606</b> in Generation <b>5</b> and <b>2.740</b> by Generation <b>7</b>, showing that later generations improved the overall population even after the best score stopped increasing.</p>
-<h3>4.2 Lineage Graph</h3>
-<section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage graph</h3><p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a parent-to-child connection.</p></aside></div><p class="lineage-caption">Figure 3: Interactive lineage graph.</p></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Figure 3: Interactive lineage graph of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
+<h3>4.2 Reading the lineage</h3>
 <p>The lineage contains <b>80</b> evaluated harnesses, with pale edges showing every parent link and the red path tracing the ancestors of the final champion. Single-parent edges represent elite copies, while two-parent edges represent crossover children.</p>
 <p>Candidate <code>g2_00</code> provides one clear crossover example: its parents scored <b>1.314</b> and <b>0.876</b>, with one carrying concise survival rules and the other a detailed technology plan. The crossover retained both traits, after which mutation added immediate stone mining and goal reassessment producing a child that scored <b>1.854</b>.</p>
 

@@ -1,13 +1,13 @@
-# Harness Darwinism experiment dossier
+# Harness Darwinism evolution atlas
 
-This folder is a self-contained experiment-dossier presentation of the Harness Darwinism article.
+This folder is a self-contained, lineage-first evolution-atlas presentation of the Harness Darwinism article.
 Publish the folder at the desired website path without bundling or server-side rendering.
 
 Required files:
 
 - `index.html`: article markup
 - `styles.css`: page and lineage layout
-- `app.js`: scroll progress and interactive lineage behavior
+- `app.js`: scroll progress, generation cards, and interactive lineage behavior
 - `lineage-data.json`: lineage records loaded by the interactive graph
 - `assets/`: figures and Crafter replay GIFs used by the article
 

@@ -27,6 +27,12 @@ const bar = document.getElementById('progress');
   const svgNamespace = "http://www.w3.org/2000/svg";
   const selectedEdges = new Set();
 
+  function markGeneration(generation) {
+    document.querySelectorAll(".generation-card").forEach((card) => {
+      card.classList.toggle("is-active", Number(card.dataset.generation) === generation);
+    });
+  }
+
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(svgNamespace, tag);
     for (const [name, value] of Object.entries(attributes)) {
@@ -109,6 +115,8 @@ const bar = document.getElementById('progress');
     const child = byId.get(childId);
     if (!child) return;
 
+    markGeneration(child.generation);
+
     for (const selectedEdge of selectedEdges) {
       const oldLine = selectedEdge.querySelector(".edge-visible");
       oldLine.setAttribute("stroke", "#cbd5dc");
@@ -152,6 +160,7 @@ const bar = document.getElementById('progress');
   }
 
   function showInitial(record) {
+    markGeneration(record.generation);
     detail.replaceChildren();
     detail.appendChild(htmlElement("h3", "", record.id));
     detail.appendChild(htmlElement("span", "detail-badge", "Initial genome"));
@@ -267,6 +276,67 @@ const bar = document.getElementById('progress');
       }
     });
     nodeLayer.appendChild(group);
+  }
+
+  const atlas = document.getElementById("generation-atlas");
+  const phaseNames = [
+    "Baseline",
+    "Carry-forward",
+    "First lift",
+    "Plateau",
+    "Plateau",
+    "Breakthrough",
+    "Retained",
+    "Champion",
+  ];
+
+  if (atlas) {
+    for (let generation = 0; generation < 8; generation += 1) {
+      const candidates = records.filter((record) => record.generation === generation);
+      const best = candidates.reduce((leader, candidate) =>
+        candidate.score > leader.score ? candidate : leader,
+      );
+      const mean = candidates.reduce((total, candidate) => total + candidate.score, 0) / candidates.length;
+      const card = htmlElement("button", "generation-card");
+      card.type = "button";
+      card.dataset.generation = String(generation);
+      card.setAttribute(
+        "aria-label",
+        `Inspect Generation ${generation}, best score ${best.score.toFixed(3)}, mean score ${mean.toFixed(3)}`,
+      );
+      if (generation === 2 || generation === 5) card.classList.add("has-gain");
+
+      const header = htmlElement("span", "generation-card-header");
+      header.append(
+        htmlElement("span", "generation-label", `GEN ${generation}`),
+        htmlElement("span", "generation-phase", phaseNames[generation]),
+      );
+      const score = htmlElement("span", "generation-score");
+      score.append(
+        htmlElement("small", "", "BEST"),
+        htmlElement("strong", "", best.score.toFixed(3)),
+      );
+      const statistics = htmlElement("span", "generation-statistics");
+      statistics.append(
+        htmlElement("span", "", `Mean ${mean.toFixed(3)}`),
+        htmlElement("span", "", best.id.slice(best.id.lastIndexOf("_g") + 1)),
+      );
+      const operation = best.parents.length > 1
+        ? "Crossover"
+        : best.parents.length === 1
+          ? "Elite"
+          : "Initial genome";
+      card.append(header, score, statistics, htmlElement("span", "generation-operation", operation));
+      card.addEventListener("click", () => {
+        if (best.parents.length) {
+          showConnection(best.parents[0], best.id);
+        } else {
+          showInitial(best);
+        }
+        document.getElementById("lineage-title").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      atlas.appendChild(card);
+    }
   }
 
   const parameters = new URLSearchParams(window.location.search);
