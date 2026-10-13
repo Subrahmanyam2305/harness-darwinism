@@ -4,9 +4,13 @@
 
 ## 1. Introduction
 
-As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve recursively as they gathered evidence in an unfamiliar environment.
+As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve across repeated attempts without changing their weights.
 
-Many agent systems approach this problem by storing past trials and trajectories in external memory. They retrieve relevant evidence into working context when similar tasks appear. The model weights stay fixed, but each attempt starts with better evidence.
+Prior work has treated external memory as one way to support this form of adaptation. Generative Agents stores a natural-language record of experience, creates higher-level reflections, and retrieves relevant memories for planning [2].
+
+Reflexion turns task feedback into verbal reflections and stores them in episodic memory for later attempts [3]. ExpeL extracts reusable insights from successful and failed trajectories, then retrieves them during inference [4].
+
+Voyager stores successful behaviors as executable skills and retrieves them for new tasks [5]. In each system, the model stays fixed while the information or capabilities supplied to the next attempt improve.
 
 This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?
 
@@ -24,9 +28,11 @@ Within the controlled 85-action phase, best score increased from 1.314 to 1.854.
 
 ## 2. Related Work
 
-Reflexion stores verbal feedback in episodic memory, while ExpeL extracts lessons from prior tasks and recalls them later. Both improve future decisions without changing model weights [2, 3]. Our method changes the harness itself.
+Generative Agents retrieves observations and synthesized reflections for planning [2]. Reflexion stores verbal feedback in episodic memory [3]. ExpeL extracts lessons from prior tasks and recalls them later [4].
 
-Genetic algorithms use selection, crossover, and mutation [4]. The Darwin Gödel Machine evolves coding agents and keeps a lineage archive [5]. We use generations, two-parent crossover, and typed harness genomes.
+Voyager stores and retrieves executable skills rather than raw trajectories [5]. These systems improve future decisions without changing model weights. Our method changes the harness itself.
+
+Genetic algorithms use selection, crossover, and mutation [6]. The Darwin Gödel Machine evolves coding agents and keeps a lineage archive [7]. We use generations, two-parent crossover, and typed harness genomes.
 
 ## 3. Methodology
 
@@ -221,7 +227,7 @@ This is evidence of possible overfitting. Evolution can preserve a useful shortc
 
 ### 5.5 Comparison with published Crafter results
 
-CrafterDojo reports 31.8 for its strongest prior baseline and 61.4 for its large behavioral-cloning model [6]. The official Crafter scoreboard also lists humans at 50.5 [7].
+CrafterDojo reports 31.8 for its strongest prior baseline and 61.4 for its large behavioral-cloning model [8]. The official Crafter scoreboard also lists humans at 50.5 [9].
 
 Our score of 5.606 is much lower. It is also not directly comparable. Published results use different observations, training budgets, policies, and many evaluation episodes.
 
@@ -248,9 +254,11 @@ The experiment also exposed an evaluation requirement. Generating another prompt
 ## References
 
 1. Danijar Hafner. [Benchmarking the Spectrum of Agent Capabilities](https://arxiv.org/abs/2109.06780), 2021.
-2. Noah Shinn et al. [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366), 2023.
-3. Andrew Zhao et al. [ExpeL: LLM Agents Are Experiential Learners](https://arxiv.org/abs/2308.10144), 2023.
-4. A. E. Eiben and J. E. Smith. [Introduction to Evolutionary Computing](https://doi.org/10.1007/978-3-662-44874-8), 2015.
-5. Jenny Zhang et al. [Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents](https://arxiv.org/abs/2505.22954), 2025.
-6. Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. [CrafterDojo](https://arxiv.org/abs/2508.13530), 2025.
-7. Danijar Hafner. [Crafter repository and official scoreboard](https://github.com/danijar/crafter), accessed October 2026.
+2. Joon Sung Park et al. [Generative Agents: Interactive Simulacra of Human Behavior](https://doi.org/10.1145/3586183.3606763), 2023.
+3. Noah Shinn et al. [Reflexion: Language Agents with Verbal Reinforcement Learning](https://papers.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html), 2023.
+4. Andrew Zhao et al. [ExpeL: LLM Agents Are Experiential Learners](https://ojs.aaai.org/index.php/AAAI/article/view/29936), 2024.
+5. Guanzhi Wang et al. [Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/abs/2305.16291), 2023.
+6. A. E. Eiben and J. E. Smith. [Introduction to Evolutionary Computing](https://doi.org/10.1007/978-3-662-44874-8), 2015.
+7. Jenny Zhang et al. [Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents](https://arxiv.org/abs/2505.22954), 2025.
+8. Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. [CrafterDojo](https://arxiv.org/abs/2508.13530), 2025.
+9. Danijar Hafner. [Crafter repository and official scoreboard](https://github.com/danijar/crafter), accessed October 2026.
