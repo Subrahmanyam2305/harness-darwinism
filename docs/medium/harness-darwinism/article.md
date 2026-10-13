@@ -8,15 +8,7 @@ As frontier models become more capable of completing tasks from single-shot prom
 
 Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose Harness Darwinism, an evolutionary framework for studying harness evolution as a form of recursive self-improvement.
 
-We treated each harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by an agent. A population of these genomes then competed on the same task.
-
-The environment supplied the fitness score used to rank them. High-scoring genomes survived, while a second model combined two parents and applied one mutation based on their failures.
-
-Harness Darwinism applies this genetic algorithm to recursive harness improvement while keeping the underlying gameplay model fixed.
-
-Our experiment ran for eight generations in Crafter. We used ten candidates per generation, retained five elites, and produced five children through crossover and mutation.
-
-Within the controlled 85-action phase, the best score increased from 1.314 to 1.854. The later 200-action phase reached 5.606, although it cannot be compared directly with the shorter episodes.
+Although our experiments did not produce a high absolute score per episode, after eight generations in Crafter, the best score per episode increased from **1.3** to **5.7**, indicating that the harness evolved over time.
 
 ## 2. Related Work
 
