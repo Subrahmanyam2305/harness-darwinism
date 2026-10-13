@@ -38,35 +38,38 @@
     figure img { display:block; max-width:100%; max-height:720px; margin:auto; border:1px solid var(--rule); background:#fff; }
     figure img[src$=".gif"] { width:min(100%, 520px); image-rendering:pixelated; }
     figcaption { max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:left; }
-    .lineage-explorer { width:min(1160px, calc(100vw - 48px)); margin:38px 50%; transform:translateX(-50%); border:1px solid var(--rule); background:#fff; }
+    .lineage-explorer { position:relative; left:50%; width:min(1320px, calc(100vw - 32px)); margin:38px 0; transform:translateX(-50%); overflow:hidden; border:1px solid var(--rule); background:#fff; }
     .lineage-heading { padding:20px 24px 16px; border-bottom:1px solid var(--rule); }
     .lineage-heading h3 { margin:0 0 4px; color:var(--accent); }
     .lineage-heading p { margin:0; color:var(--muted); font-size:13px; }
-    .lineage-layout { display:grid; grid-template-columns:minmax(0, 2fr) minmax(310px, 1fr); min-height:620px; }
+    .lineage-layout { display:grid; grid-template-columns:minmax(0, 1fr) 400px; min-height:680px; }
     .lineage-canvas { overflow:auto; border-right:1px solid var(--rule); background:var(--paper); }
-    #lineage-graph { display:block; min-width:900px; width:100%; height:620px; }
+    #lineage-graph { display:block; min-width:900px; width:100%; height:680px; }
     .lineage-edge { cursor:pointer; }
     .lineage-edge:focus { outline:none; }
     .lineage-edge:focus .edge-visible { stroke:var(--accent); stroke-width:4; }
     .lineage-node { cursor:pointer; }
-    .lineage-detail { max-height:620px; overflow:auto; padding:20px; background:#faf7f2; font-family:"Source Code Pro", monospace; font-size:11px; line-height:1.55; }
-    .lineage-detail h3 { margin:0 0 8px; font-family:"Libre Baskerville", Georgia, serif; font-size:17px; }
+    .lineage-detail { max-height:680px; overflow:auto; overflow-wrap:anywhere; padding:20px; background:#faf7f2; font-family:"Source Code Pro", monospace; font-size:11px; line-height:1.55; }
+    .lineage-detail h3 { margin:0 0 8px; overflow-wrap:anywhere; font-family:"Libre Baskerville", Georgia, serif; font-size:17px; }
     .lineage-detail h4 { margin:18px 0 7px; padding-top:12px; border-top:1px solid var(--rule); color:var(--accent); font-size:11px; letter-spacing:.05em; text-transform:uppercase; }
     .lineage-detail p { margin:0 0 10px; }
     .lineage-detail pre { max-height:260px; margin:8px 0 14px; padding:12px; white-space:pre-wrap; overflow:auto; font-size:10px; line-height:1.5; }
     .detail-empty { color:var(--muted); font-family:"Libre Baskerville", Georgia, serif; font-style:italic; }
     .detail-badge { display:inline-block; margin:0 0 12px; padding:3px 7px; border-radius:999px; background:var(--accent); color:#fff; font-size:10px; text-transform:uppercase; }
     .parent-card { margin:8px 0; padding:10px; border:1px solid var(--rule); background:#fff; }
-    .parent-card strong { display:block; color:var(--teal); }
+    .parent-card strong { display:block; overflow-wrap:anywhere; color:var(--teal); }
     footer { padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }
+    @media (max-width:1180px) {
+      .lineage-layout { grid-template-columns:1fr; }
+      .lineage-canvas { border-right:0; border-bottom:1px solid var(--rule); }
+      .lineage-detail { max-height:620px; }
+    }
     @media (max-width:700px) {
       .paper { width:100%; margin:0; box-shadow:none; }
       .masthead, article { padding-left:22px; padding-right:22px; }
       h1 { font-size:29px; }
       figure { margin-left:0; margin-right:0; }
       .lineage-explorer { width:calc(100vw - 20px); }
-      .lineage-layout { grid-template-columns:1fr; }
-      .lineage-canvas { border-right:0; border-bottom:1px solid var(--rule); }
       .lineage-detail { max-height:none; }
       footer { padding-left:22px; padding-right:22px; }
     }
@@ -108,9 +111,9 @@
 }</code></pre>
 <figure><img src="assets/architecture.png" alt="System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence." loading="lazy"><figcaption>Figure 1: High level system design</figcaption></figure>
 <h3>2.3 Initialization</h3>
-<p>Generation 0 begins with 10 hand-written rules covering resource collection, tool crafting, health, water, sleep, combat, and furnace construction, and each initial genome received a random subset of one to five of those rules.</p>
+<p>Generation <b>0</b> begins with <b>10</b> hand-written rules covering resource collection, tool crafting, health, water, sleep, combat, and furnace construction, and each initial genome received a random subset of one to five of those rules.</p>
 <h3>2.4 Fitness function</h3>
-<p>Crafter tracks 22 achievements, and we computed its standard score from their success rates:</p>
+<p>Crafter tracks <b>22</b> achievements, and we computed its standard score from their success rates:</p>
 <pre data-language="text"><code>score = exp(mean(log(1 + 100 × achievement_rate))) - 1</code></pre>
 <p>Every candidate in a generation played the same world, which reduced within-generation noise and made selection consistent.</p>
 <h3>2.5 Selection and elitism</h3>
@@ -122,43 +125,40 @@
 <p>A global ledger stored the hash of every tried configuration and K elite copies and N-K children then formed the next population, keeping the active population fixed at N.</p>
 <h2 id="3-experiments">3. Experiments</h2>
 <h3>3.1 Crafter environment</h3>
-<p>Crafter is a 2D survival game set in a procedurally generated world, where the agent collects resources, manages health and energy, fights enemies, builds stations, and crafts better tools [1]. Its action space contains 17 discrete actions, while evaluation covers 22 achievements ranging from collecting wood to crafting advanced tools and finding diamond.</p>
+<p>Crafter is a <b>2D</b> survival game set in a procedurally generated world, where the agent collects resources, manages health and energy, fights enemies, builds stations, and crafts better tools [1]. Its action space contains <b>17</b> discrete actions, while evaluation covers <b>22</b> achievements ranging from collecting wood to crafting advanced tools and finding diamond.</p>
 <p>We optimized the geometric-mean Crafter score because it rewards progress across the full achievement set while giving additional value to achievements that few episodes unlock.</p>
 <h3>3.2 Experiment setup</h3>
-<div class="table-wrap"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody><tr></tr><tr><td>Generations</td><td>8</td></tr><tr><td>Candidates per generation</td><td>10</td></tr><tr><td>Survivors per generation</td><td>5</td></tr><tr><td>Children per generation</td><td>5</td></tr><tr></tr><tr></tr><tr></tr><tr><td>Timesteps per episode</td><td>200 steps</td></tr><tr><td>Gameplay model</td><td>Claude Haiku 4.5</td></tr><tr><td>Meta-agent</td><td>Claude Opus 4.6</td></tr><tr></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody><tr></tr><tr><td>Generations</td><td><b>8</b></td></tr><tr><td>Candidates per generation</td><td><b>10</b></td></tr><tr><td>Survivors per generation</td><td><b>5</b></td></tr><tr><td>Children per generation</td><td><b>5</b></td></tr><tr></tr><tr></tr><tr></tr><tr><td>Timesteps per episode</td><td><b>200</b> steps</td></tr><tr><td>Gameplay model</td><td>Claude Haiku <b>4.5</b></td></tr><tr><td>Meta-agent</td><td>Claude Opus <b>4.6</b></td></tr><tr></tr></tbody></table></div>
 
 <h2 id="4-results">4. Results</h2>
 <h3>4.1 Fitness over generations</h3>
-<figure><img src="assets/score-by-generation.png" alt="Best and mean fitness across eight generations, with every episode evaluated for 200 steps." loading="lazy"><figcaption>Best and mean fitness across eight generations, with every episode evaluated for 200 steps.</figcaption></figure>
-<p>Generation 0 began with a best score of 1.314 and a population mean of 0.901. The best score rose to 1.854 by Generation 2, remained there through Generation 4, and then reached 5.606 in Generation 5, where it stayed through Generation 7.</p>
-<p>The population mean fluctuated during the earlier generations before rising from 1.299 in Generation 4 to 1.606 in Generation 5 and 2.740 by Generation 7, showing that later generations improved the overall population even after the best score stopped increasing.</p>
-<h3>4.2 Lineage</h3>
+<figure><img src="assets/score-by-generation.png" alt="Best and mean fitness across eight generations, with every episode evaluated for 200 steps." loading="lazy"><figcaption>Best and mean fitness across eight generations, with every episode evaluated for <b>200</b> steps.</figcaption></figure>
+<p>Generation <b>0</b> began with a best score of <b>1.314</b> and a population mean of <b>0.901</b>. The best score rose to <b>1.854</b> by Generation <b>2</b>, remained there through Generation <b>4</b>, and then reached <b>5.7</b> in Generation <b>5</b>, where it stayed through Generation <b>7</b>.</p>
+<p>The population mean fluctuated during the earlier generations before rising from <b>1.299</b> in Generation <b>4</b> to <b>1.606</b> in Generation <b>5</b> and <b>2.740</b> by Generation <b>7</b>, showing that later generations improved the overall population even after the best score stopped increasing.</p>
+<h3>4.2 Lineage Graph</h3>
 <section class="lineage-explorer" aria-labelledby="lineage-title"><div class="lineage-heading"><h3 id="lineage-title">Interactive lineage</h3><p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p></div><div class="lineage-layout"><div class="lineage-canvas"><svg id="lineage-graph" viewBox="0 0 1400 820" role="img" aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div><aside class="lineage-detail" id="lineage-detail" aria-live="polite"><p class="detail-empty">Select a parent-to-child connection.</p></aside></div></section><noscript><figure><img src="assets/lineage-overview.png" alt="Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion&#x27;s ancestry."><figcaption>Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.</figcaption></figure></noscript>
-<p>The lineage contains 80 evaluated harnesses, with pale edges showing every parent link and the red path tracing the ancestors of the final champion. Single-parent edges represent elite copies, while two-parent edges represent crossover children, preventing an inherited survivor from being mistaken for a new crossover.</p>
-<p>Candidate <code>g2_00</code> provides one clear crossover example: its parents scored 1.314 and 0.876, with one carrying concise survival rules and the other a detailed technology plan. The crossover retained both traits, after which mutation added immediate stone mining, inventory checks, goal reassessment, and a larger history budget, producing a child that scored 1.854.</p>
-<p>Because this child changed several fields at once, the result does not establish that any single rule caused the gain; that claim would require a rule-level ablation.</p>
+<p>The lineage contains <b>80</b> evaluated harnesses, with pale edges showing every parent link and the red path tracing the ancestors of the final champion. Single-parent edges represent elite copies, while two-parent edges represent crossover children.</p>
+<p>Candidate <code>g2_00</code> provides one clear crossover example: its parents scored <b>1.314</b> and <b>0.876</b>, with one carrying concise survival rules and the other a detailed technology plan. The crossover retained both traits, after which mutation added immediate stone mining and goal reassessment producing a child that scored <b>1.854</b>.</p>
+
 <h3>4.3 Observed behavior</h3>
-<p>Recorded replay evidence is available for Generations 3–5, and the following examples show three measured candidates on world seed 105.</p>
-<figure><img src="assets/generation-3-score-0.521.gif" alt="Generation 3 candidate g3_00. Score 0.521 with a 200-step budget." loading="lazy"><figcaption>Generation 3 candidate g3_00. Score 0.521 with a 200-step budget.</figcaption></figure>
+<figure><img src="assets/generation-3-score-0.521.gif" alt="Generation 3 candidate g3_00. Score 0.521 with a 200-step budget." loading="lazy"><figcaption>Generation <b>3</b> candidate g3_00. Score <b>0.521</b> with a <b>200</b>-step budget.</figcaption></figure>
 <p>Candidate <code>g3_00</code> collected wood and placed a table but did not reach stone tools, spending much of the episode near the beginning of the technology tree.</p>
-<figure><img src="assets/generation-4-score-1.854.gif" alt="Generation 4 candidate g4_05. Score 1.854 with a 200-step budget." loading="lazy"><figcaption>Generation 4 candidate g4_05. Score 1.854 with a 200-step budget.</figcaption></figure>
+<figure><img src="assets/generation-4-score-1.854.gif" alt="Generation 4 candidate g4_05. Score 1.854 with a 200-step budget." loading="lazy"><figcaption>Generation <b>4</b> candidate g4_05. Score <b>1.854</b> with a <b>200</b>-step budget.</figcaption></figure>
 <p>Candidate <code>g4_05</code> collected wood, stone, and coal, placed a table, and made a wooden pickaxe, producing an action sequence with a clearer progression from resources to tools.</p>
-<figure><img src="assets/generation-5-score-5.606.gif" alt="Generation 5 candidate g5_02. Score 5.606 with a 200-step budget." loading="lazy"><figcaption>Generation 5 candidate g5_02. Score 5.606 with a 200-step budget.</figcaption></figure>
+<figure><img src="assets/generation-5-score-5.606.gif" alt="Generation 5 candidate g5_02. Score 5.606 with a 200-step budget." loading="lazy"><figcaption>Generation <b>5</b> candidate g5_02. Score <b>5.606</b> with a <b>200</b>-step budget.</figcaption></figure>
 <p>Candidate <code>g5_02</code> unlocked nine achievements by collecting wood, stone, coal, water, and a sapling, making wooden and stone pickaxes, and placing both a table and a furnace.</p>
 <h3>4.4 Rule evolution</h3>
 <p>The rules became more specific as the meta-agent encountered failures and carried their lessons into later generations.</p>
-<div class="table-wrap"><table><thead><tr><th>Stage</th><th>Example policy change</th><th>Score</th></tr></thead><tbody><tr><td>Generation 0</td><td>“Collect wood before anything else.”</td><td>Best 1.314</td></tr><tr><td>Generation 2</td><td>Mine stone after the wooden pickaxe; check inventory; reassess the next goal.</td><td>1.854</td></tr><tr><td>Generation 4</td><td>Add step limits, milestone notes, and direct cave or downward search.</td><td>1.854</td></tr><tr><td>Generation 5</td><td>Add anti-stall thresholds, survival thresholds, and a 25-step history window.</td><td>5.606</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Stage</th><th>Example policy change</th><th>Score</th></tr></thead><tbody><tr><td>Generation <b>0</b></td><td>“Collect wood before anything else.”</td><td>Best <b>1.314</b></td></tr><tr><td>Generation <b>2</b></td><td>Mine stone after the wooden pickaxe; check inventory; reassess the next goal.</td><td><b>1.854</b></td></tr><tr><td>Generation <b>4</b></td><td>Add step limits, milestone notes, and direct cave or downward search.</td><td><b>1.854</b></td></tr><tr><td>Generation <b>5</b></td><td>Add anti-stall thresholds, survival thresholds, and a <b>25</b>-step history window.</td><td><b>5.606</b></td></tr></tbody></table></div>
 <p>The champion first appeared as <code>g5_02</code>, after which elitism copied it to <code>g6_05</code> and then <code>g7_05</code>, with both copies retaining the same score and genome.</p>
-<p>The final policy remained imperfect because one rule claimed that stone was always two to four blocks below the surface, a statement that may fit seed 105 but is unsafe for unseen worlds. This suggests possible overfitting, since evolution can preserve a useful shortcut before there is evidence that it generalizes.</p>
+<p>The final policy remained imperfect because one rule claimed that stone was always two to four blocks below the surface, a statement that may fit seed <b>105</b> but is unsafe for unseen worlds. This suggests possible overfitting, since evolution can preserve a useful shortcut before there is evidence that it generalizes.</p>
 <h3>4.5 Comparison with published Crafter results</h3>
-<p>CrafterDojo reports 31.8 for its strongest prior baseline and 61.4 for its large behavioral-cloning model [8], while the official Crafter scoreboard lists humans at 50.5 [9]. Our score of 5.606 is substantially lower, but it is also not directly comparable because the published results use different observations, training budgets, policies, and many evaluation episodes.</p>
-<p>Our run used one training world and 200 steps per episode because its purpose was to test harness evolution, lineage, and replay rather than establish a Crafter benchmark result.</p>
+<p>CrafterDojo reports <b>31.8</b> for its strongest prior baseline and <b>61.4</b> for its large behavioral-cloning model [8], while the official Crafter scoreboard lists humans at <b>50.5</b> [9]. Our score of <b>5.606</b> is substantially lower, but it is also not directly comparable because the published results use different observations, training budgets, policies, and many evaluation episodes.</p>
 <h2 id="5-conclusion">5. Conclusion</h2>
 <p>Harness Darwinism turned an agent harness into a searchable genome by using selection to retain stronger policies, crossover to combine parents, and mutation to act on failure evidence, while preserving the complete history of the search.</p>
-<p>Across eight generations with a fixed 200-step budget, best fitness rose from 1.314 to 5.606, while mean fitness rose from 0.901 to 2.740. Although the experiment did not reach published Crafter scores, it showed that a fixed model can produce better training behavior when the harness itself becomes the object of evolution.</p>
-<p>The experiment had two main limits: it used one training world and did not run a paired evaluation on unseen worlds. API usage created another constraint because one 200-step episode could send more than two million input tokens as each action repeated recent history, meaning that larger context genes increased both capability and cost.</p>
+<p>Across eight generations with a fixed <b>200</b>-step budget, best fitness rose from <b>1.314</b> to <b>5.606</b>, while mean fitness rose from <b>0.901</b> to <b>2.740</b>. Although the experiment did not reach published Crafter scores, it showed that a fixed model can produce better training behavior when the harness itself becomes the object of evolution.</p>
+<p>The experiment had two main limits: it used one training world and did not run a paired evaluation on unseen worlds. API usage created another constraint because one <b>200</b>-step episode could send more than two million input tokens as each action repeated recent history, meaning that larger context genes increased both capability and cost.</p>
 <p>The starter rules also restricted the search because they mainly covered survival and the crafting sequence, whereas a stronger initial population could include navigation, spatial memory, recovery, and tool-use policies. A follow-up study should therefore use several shared training seeds, freeze the champion, compare it with the initial harness on paired held-out seeds, and remove one evolved rule at a time.</p>
-<p>The experiment also exposed a basic evaluation requirement: generating another prompt is easy, but retaining enough evidence to determine whether that prompt is better is harder.</p>
 <h2 id="references">References</h2>
 <ol><li>Danijar Hafner. <a href="https://arxiv.org/abs/2109.06780">Benchmarking the Spectrum of Agent Capabilities</a>, 2021.</li><li>Joon Sung Park et al. <a href="https://doi.org/10.1145/3586183.3606763">Generative Agents: Interactive Simulacra of Human Behavior</a>, 2023.</li><li>Noah Shinn et al. <a href="https://papers.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html">Reflexion: Language Agents with Verbal Reinforcement Learning</a>, 2023.</li><li>Andrew Zhao et al. <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29936">ExpeL: LLM Agents Are Experiential Learners</a>, 2024.</li><li>Guanzhi Wang et al. <a href="https://arxiv.org/abs/2305.16291">Voyager: An Open-Ended Embodied Agent with Large Language Models</a>, 2023.</li><li>A. E. Eiben and J. E. Smith. <a href="https://doi.org/10.1007/978-3-662-44874-8">Introduction to Evolutionary Computing</a>, 2015.</li><li>Jenny Zhang et al. <a href="https://arxiv.org/abs/2505.22954">Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents</a>, 2025.</li><li>Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. <a href="https://arxiv.org/abs/2508.13530">CrafterDojo</a>, 2025.</li><li>Danijar Hafner. <a href="https://github.com/danijar/crafter">Crafter repository and official scoreboard</a>, accessed October 2026.</li></ol></article>
     <footer>Research report prepared from Atlas experiment records and recorded Crafter episodes. Training world: seed 105.</footer>
