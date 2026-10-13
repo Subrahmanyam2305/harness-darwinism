@@ -21,6 +21,7 @@
     a { color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }
     .table-wrap { overflow-x:auto; margin:22px 0 28px; }
     table { width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }
+    caption { padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:left; caption-side:top; }
     th, td { padding:10px 12px; border:1px solid var(--rule); text-align:left; vertical-align:top; }
     th { background:var(--soft); font:500 11px/1.4 "Source Code Pro", monospace; letter-spacing:.04em; text-transform:uppercase; }
     figure { margin:34px -20px; text-align:center; }

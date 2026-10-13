@@ -132,7 +132,7 @@ def build_architecture() -> None:
         draw,
         (70, 175, 305, 315),
         "1  POPULATION",
-        ["10 harness genomes", "Rules + memory + context"],
+        ["N harness genomes", "Rules + memory + context"],
         accent=RED,
     )
     box(
@@ -146,7 +146,7 @@ def build_architecture() -> None:
         draw,
         (660, 175, 895, 315),
         "3  SELECT",
-        ["Keep top 5", "Archive bottom 5"],
+        ["Keep top K", "Archive N − K"],
         accent=GOLD,
     )
     box(
@@ -213,8 +213,8 @@ def build_architecture() -> None:
         "VALIDATE + REFILL",
         [
             "Reject duplicate genomes",
-            "5 elite copies + 5 children",
-            "Population returns to 10",
+            "K elites + (N − K) children",
+            "Population returns to N",
         ],
         accent=GOLD,
         fill="#fbf3df",
@@ -264,7 +264,7 @@ def drawio_xml() -> str:
     nodes = [
         (
             "pop",
-            "1  POPULATION<br>10 harness genomes<br>Rules + memory + context",
+            "1  POPULATION<br>N harness genomes<br>Rules + memory + context",
             70,
             175,
             235,
@@ -282,7 +282,7 @@ def drawio_xml() -> str:
         ),
         (
             "select",
-            "3  SELECT<br>Keep top 5<br>Archive bottom 5",
+            "3  SELECT<br>Keep top K<br>Archive N − K",
             660,
             175,
             235,
@@ -336,7 +336,7 @@ def drawio_xml() -> str:
         ),
         (
             "validate",
-            "VALIDATE + REFILL<br>Reject duplicates<br>5 elites + 5 children",
+            "VALIDATE + REFILL<br>Reject duplicates<br>K elites + (N − K) children<br>Population returns to N",
             630,
             655,
             360,

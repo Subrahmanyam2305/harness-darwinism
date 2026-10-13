@@ -6,7 +6,7 @@
 
 As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve performance across repeated attempts without changing their weights.
 
-Prior work has treated external memory as one way to support this form of adaptation, but few have explored agentic memory through an evolutionary lens. In this work, we propose **Harness Darwinism**, a framework for studying harness evolution as a form of recursive self-improvement.
+Prior work has treated external memory as one way to support this form of adaptation [2–5], but few have explored agentic memory through an evolutionary lens [7]. In this work, we propose **Harness Darwinism**, a framework for studying harness evolution as a form of recursive self-improvement.
 
 Although our experiments did not produce a high absolute score per episode, after eight generations in Crafter, the best score per episode increased from **1.3** to **5.7**, indicating that the harness evolved over time.
 
@@ -14,7 +14,7 @@ Although our experiments did not produce a high absolute score per episode, afte
 
 ### 2.1 Primer on genetic algorithms
 
-A genetic algorithm mimics Darwin's principle of evolution. It begins with a population of candidate solutions, each with a genome that defines its behavior.
+A genetic algorithm mimics Darwin's principle of evolution. It begins with a population of candidate solutions, each with a genome that defines its behavior [6].
 
 This process has five main stages:
 
@@ -53,7 +53,7 @@ For each child, the meta-agent receives two selected genomes, produces a typed c
 
 The system records every genome, run, score, parent link, crossover note, mutation note, and tried configuration hash so that the search remains resumable and its lineage remains visible.
 
-![System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.](assets/architecture.png)
+![Figure 1: System architecture for selection, crossover, mutation, Crafter evaluation, and experiment evidence.](assets/architecture.png)
 
 ### 2.3 Initialization
 
@@ -95,6 +95,8 @@ We optimized the geometric-mean Crafter score because it rewards progress across
 
 ### 3.2 Experiment setup
 
+**Table 1: Experiment setup.**
+
 | Setting | Value |
 |---|---|
 | Experiment | `demo-evolution-3` |
@@ -121,7 +123,7 @@ Every candidate was evaluated with the same 200-step episode budget. Because we 
 
 ### 4.1 Fitness over generations
 
-![Best and mean fitness across eight generations, with every episode evaluated for 200 steps.](assets/score-by-generation.png)
+![Figure 2: Best and mean fitness across eight generations, with every episode evaluated for 200 steps.](assets/score-by-generation.png)
 
 Generation 0 began with a best score of 1.314 and a population mean of 0.901. The best score rose to 1.854 by Generation 2, remained there through Generation 4, and then reached 5.606 in Generation 5, where it stayed through Generation 7.
 
@@ -129,7 +131,7 @@ The population mean fluctuated during the earlier generations before rising from
 
 ### 4.2 Lineage
 
-![Full lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.](assets/lineage-overview.png)
+![Figure 3: Interactive lineage of 80 candidates. Node color shows score. The red outline marks the final champion's ancestry.](assets/lineage-overview.png)
 
 The lineage contains 80 evaluated harnesses, with pale edges showing every parent link and the red path tracing the ancestors of the final champion. Single-parent edges represent elite copies, while two-parent edges represent crossover children, preventing an inherited survivor from being mistaken for a new crossover.
 
@@ -141,21 +143,23 @@ Because this child changed several fields at once, the result does not establish
 
 Recorded replay evidence is available for Generations 3–5, and the following examples show three measured candidates on world seed 105.
 
-![Generation 3 candidate g3_00. Score 0.521 with a 200-step budget.](assets/generation-3-score-0.521.gif)
+![Figure 4: Generation 3 candidate g3_00. Score 0.521 with a 200-step budget.](assets/generation-3-score-0.521.gif)
 
 Candidate `g3_00` collected wood and placed a table but did not reach stone tools, spending much of the episode near the beginning of the technology tree.
 
-![Generation 4 candidate g4_05. Score 1.854 with a 200-step budget.](assets/generation-4-score-1.854.gif)
+![Figure 5: Generation 4 candidate g4_05. Score 1.854 with a 200-step budget.](assets/generation-4-score-1.854.gif)
 
 Candidate `g4_05` collected wood, stone, and coal, placed a table, and made a wooden pickaxe, producing an action sequence with a clearer progression from resources to tools.
 
-![Generation 5 candidate g5_02. Score 5.606 with a 200-step budget.](assets/generation-5-score-5.606.gif)
+![Figure 6: Generation 5 candidate g5_02. Score 5.606 with a 200-step budget.](assets/generation-5-score-5.606.gif)
 
 Candidate `g5_02` unlocked nine achievements by collecting wood, stone, coal, water, and a sapling, making wooden and stone pickaxes, and placing both a table and a furnace.
 
 ### 4.4 Rule evolution
 
 The rules became more specific as the meta-agent encountered failures and carried their lessons into later generations.
+
+**Table 2: Example policy changes across generations.**
 
 | Stage | Example policy change | Score |
 |---|---|---|
@@ -195,5 +199,5 @@ The experiment also exposed a basic evaluation requirement: generating another p
 5. Guanzhi Wang et al. [Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/abs/2305.16291), 2023.
 6. A. E. Eiben and J. E. Smith. [Introduction to Evolutionary Computing](https://doi.org/10.1007/978-3-662-44874-8), 2015.
 7. Jenny Zhang et al. [Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents](https://arxiv.org/abs/2505.22954), 2025.
-8. Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. [CrafterDojo](https://arxiv.org/abs/2508.13530), 2025.
-9. Danijar Hafner. [Crafter repository and official scoreboard](https://github.com/danijar/crafter), accessed October 2026.
+8. Junyeong Park, Hyeonseo Cho, and Sungjin Ahn. [CrafterDojo: A Suite of Foundation Models for Building Open-Ended Embodied Agents in Crafter](https://arxiv.org/abs/2508.13530), 2025.
+9. Danijar Hafner. [Crafter repository README and official scoreboard](https://github.com/danijar/crafter/blob/main/README.md), accessed October 2026.

@@ -35,6 +35,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
     list_items: list[str] = []
     list_tag: str | None = None
     table_rows: list[list[str]] = []
+    table_caption: str | None = None
     in_code = False
     code_lines: list[str] = []
     code_language = ""
@@ -53,6 +54,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
             list_tag = None
 
     def flush_table() -> None:
+        nonlocal table_caption
         if not table_rows:
             return
         rows = [
@@ -63,10 +65,12 @@ def render_markdown(source: str) -> tuple[str, str, str]:
             "<tr>" + "".join(f"<td>{inline(cell)}</td>" for cell in row) + "</tr>"
             for row in rows[1:]
         )
+        caption = f"<caption>{inline(table_caption)}</caption>" if table_caption else ""
         out.append(
-            f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+            f'<div class="table-wrap"><table>{caption}<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
         )
         table_rows.clear()
+        table_caption = None
 
     for raw in lines:
         line = raw.rstrip()
@@ -103,7 +107,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
                 out.append(
                     '<section class="lineage-explorer" aria-labelledby="lineage-title">'
                     '<div class="lineage-heading">'
-                    '<h3 id="lineage-title">Interactive lineage</h3>'
+                    '<h3 id="lineage-title">Figure 3: Interactive lineage graph</h3>'
                     "<p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p>"
                     "</div>"
                     '<div class="lineage-layout">'
@@ -121,6 +125,13 @@ def render_markdown(source: str) -> tuple[str, str, str]:
                 f'<figure><img src="{html.escape(src)}" alt="{html.escape(alt)}" '
                 f'loading="{loading}"><figcaption>{inline(alt)}</figcaption></figure>'
             )
+            continue
+
+        if re.fullmatch(r"\*\*Table \d+:.+\*\*", stripped):
+            flush_paragraph()
+            flush_list()
+            flush_table()
+            table_caption = stripped[2:-2]
             continue
 
         if stripped.startswith("|"):
@@ -206,6 +217,7 @@ def build() -> None:
     a {{ color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }}
     .table-wrap {{ overflow-x:auto; margin:22px 0 28px; }}
     table {{ width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }}
+    caption {{ padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:left; caption-side:top; }}
     th, td {{ padding:10px 12px; border:1px solid var(--rule); text-align:left; vertical-align:top; }}
     th {{ background:var(--soft); font:500 11px/1.4 "Source Code Pro", monospace; letter-spacing:.04em; text-transform:uppercase; }}
     figure {{ margin:34px -20px; text-align:center; }}
