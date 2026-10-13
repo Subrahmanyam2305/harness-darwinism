@@ -9,7 +9,7 @@
     article { padding:18px 62px 72px; }
     p { margin:0 0 18px; }
     article > p:first-child { font-size:19px; line-height:1.7; }
-    h2 { margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:var(--accent); font-size:22px; line-height:1.35; }
+    h2 { margin:48px 0 17px; padding-bottom:8px; border-bottom:1px solid var(--rule); color:#000; font-size:22px; line-height:1.35; }
     h3 { margin:30px 0 10px; font-size:17px; }
     ul, ol { margin:0 0 20px 24px; padding:0; }
     li { margin:7px 0; padding-left:4px; }
@@ -33,7 +33,7 @@
     figcaption { max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:center; }
     .lineage-explorer { width:100%; margin:38px 0; overflow:hidden; border:1px solid var(--rule); background:#fff; }
     .lineage-heading { padding:20px 24px 16px; border-bottom:1px solid var(--rule); }
-    .lineage-heading h3 { margin:0 0 4px; color:var(--accent); }
+    .lineage-heading h3 { margin:0 0 4px; color:#000; }
     .lineage-heading p { margin:0; color:var(--muted); font-size:13px; }
     .lineage-layout { display:grid; grid-template-columns:1fr; }
     .lineage-canvas { overflow:hidden; border-bottom:1px solid var(--rule); background:var(--paper); }
