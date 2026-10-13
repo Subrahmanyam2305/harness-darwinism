@@ -28,8 +28,12 @@ def render_markdown(source: str) -> tuple[str, str, str]:
     """Return title, author, and rendered article body."""
     lines = source.splitlines()
     title = lines[0].removeprefix("# ").strip()
-    author = lines[2].strip("*")
-    lines = lines[3:]
+    lines = lines[1:]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    author = ""
+    if lines and re.fullmatch(r"\*\*.+\*\*", lines[0].strip()):
+        author = lines.pop(0).strip("*")
     out: list[str] = []
     paragraph: list[str] = []
     list_items: list[str] = []
@@ -107,7 +111,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
                 out.append(
                     '<section class="lineage-explorer" aria-labelledby="lineage-title">'
                     '<div class="lineage-heading">'
-                    '<h3 id="lineage-title">Figure 3: Interactive lineage graph</h3>'
+                    '<h3 id="lineage-title">Interactive lineage graph</h3>'
                     "<p>Click any connection to highlight both crossover parents and inspect the exact crossover output, mutation, and final child genome.</p>"
                     "</div>"
                     '<div class="lineage-layout">'
@@ -115,7 +119,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
                     'aria-label="Interactive graph of 80 harness candidates across eight generations"></svg></div>'
                     '<aside class="lineage-detail" id="lineage-detail" aria-live="polite">'
                     '<p class="detail-empty">Select a parent-to-child connection.</p>'
-                    "</aside></div></section>"
+                    '</aside></div><p class="lineage-caption">Figure 3: Interactive lineage graph.</p></section>'
                     f'<noscript><figure><img src="{html.escape(src)}" alt="{html.escape(alt)}">'
                     f"<figcaption>{inline(alt)}</figcaption></figure></noscript>"
                 )
@@ -178,7 +182,7 @@ def render_markdown(source: str) -> tuple[str, str, str]:
 
 def build() -> None:
     """Build index.html beside the source article."""
-    title, author, body = render_markdown((ROOT / "article.md").read_text())
+    title, _, body = render_markdown((ROOT / "article.md").read_text())
     lineage_json = json.dumps(
         json.loads((ROOT / "lineage-all.json").read_text())
     ).replace("</", "<\\/")
@@ -202,7 +206,6 @@ def build() -> None:
     .paper {{ width:min(900px, calc(100% - 32px)); margin:24px auto 64px; background:var(--paper); box-shadow:0 18px 55px rgba(67,53,39,.12); }}
     .masthead {{ padding:64px 62px 34px; text-align:center; }}
     h1 {{ max-width:760px; margin:0 auto 20px; font-size:40px; line-height:1.18; letter-spacing:-.025em; }}
-    .byline {{ color:var(--muted); font-size:14px; }}
     article {{ padding:40px 62px 72px; }}
     p {{ margin:0 0 18px; }}
     article > p:first-child {{ font-size:19px; line-height:1.7; }}
@@ -217,25 +220,25 @@ def build() -> None:
     a {{ color:var(--teal); text-decoration-thickness:1px; text-underline-offset:3px; }}
     .table-wrap {{ overflow-x:auto; margin:22px 0 28px; }}
     table {{ width:100%; border-collapse:collapse; font-size:13px; line-height:1.55; }}
-    caption {{ padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:left; caption-side:top; }}
+    caption {{ padding:0 0 8px; color:var(--muted); font-size:12px; font-weight:700; text-align:center; caption-side:top; }}
     th, td {{ padding:10px 12px; border:1px solid var(--rule); text-align:left; vertical-align:top; }}
     th {{ background:var(--soft); font:500 11px/1.4 "Source Code Pro", monospace; letter-spacing:.04em; text-transform:uppercase; }}
     figure {{ margin:34px -20px; text-align:center; }}
     figure img {{ display:block; max-width:100%; max-height:720px; margin:auto; border:1px solid var(--rule); background:#fff; }}
     figure img[src$=".gif"] {{ width:min(100%, 520px); image-rendering:pixelated; }}
-    figcaption {{ max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:left; }}
-    .lineage-explorer {{ position:relative; left:50%; width:min(1320px, calc(100vw - 32px)); margin:38px 0; transform:translateX(-50%); overflow:hidden; border:1px solid var(--rule); background:#fff; }}
+    figcaption {{ max-width:760px; margin:10px auto 0; color:var(--muted); font-size:12px; line-height:1.55; text-align:center; }}
+    .lineage-explorer {{ width:100%; margin:38px 0; overflow:hidden; border:1px solid var(--rule); background:#fff; }}
     .lineage-heading {{ padding:20px 24px 16px; border-bottom:1px solid var(--rule); }}
     .lineage-heading h3 {{ margin:0 0 4px; color:var(--accent); }}
     .lineage-heading p {{ margin:0; color:var(--muted); font-size:13px; }}
-    .lineage-layout {{ display:grid; grid-template-columns:minmax(0, 1fr) 400px; min-height:680px; }}
-    .lineage-canvas {{ overflow:auto; border-right:1px solid var(--rule); background:var(--paper); }}
-    #lineage-graph {{ display:block; min-width:900px; width:100%; height:680px; }}
+    .lineage-layout {{ display:grid; grid-template-columns:1fr; }}
+    .lineage-canvas {{ overflow:hidden; border-bottom:1px solid var(--rule); background:var(--paper); }}
+    #lineage-graph {{ display:block; width:100%; height:auto; aspect-ratio:1400 / 820; }}
     .lineage-edge {{ cursor:pointer; }}
     .lineage-edge:focus {{ outline:none; }}
     .lineage-edge:focus .edge-visible {{ stroke:var(--accent); stroke-width:4; }}
     .lineage-node {{ cursor:pointer; }}
-    .lineage-detail {{ max-height:680px; overflow:auto; overflow-wrap:anywhere; padding:20px; background:#faf7f2; font-family:"Source Code Pro", monospace; font-size:11px; line-height:1.55; }}
+    .lineage-detail {{ max-height:520px; overflow:auto; overflow-wrap:anywhere; padding:20px; background:#faf7f2; font-family:"Source Code Pro", monospace; font-size:11px; line-height:1.55; }}
     .lineage-detail h3 {{ margin:0 0 8px; overflow-wrap:anywhere; font-family:"Libre Baskerville", Georgia, serif; font-size:17px; }}
     .lineage-detail h4 {{ margin:18px 0 7px; padding-top:12px; border-top:1px solid var(--rule); color:var(--accent); font-size:11px; letter-spacing:.05em; text-transform:uppercase; }}
     .lineage-detail p {{ margin:0 0 10px; }}
@@ -244,18 +247,14 @@ def build() -> None:
     .detail-badge {{ display:inline-block; margin:0 0 12px; padding:3px 7px; border-radius:999px; background:var(--accent); color:#fff; font-size:10px; text-transform:uppercase; }}
     .parent-card {{ margin:8px 0; padding:10px; border:1px solid var(--rule); background:#fff; }}
     .parent-card strong {{ display:block; overflow-wrap:anywhere; color:var(--teal); }}
+    .lineage-caption {{ margin:0; padding:10px 20px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; line-height:1.55; text-align:center; }}
     footer {{ padding:24px 62px 36px; border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }}
-    @media (max-width:1180px) {{
-      .lineage-layout {{ grid-template-columns:1fr; }}
-      .lineage-canvas {{ border-right:0; border-bottom:1px solid var(--rule); }}
-      .lineage-detail {{ max-height:620px; }}
-    }}
     @media (max-width:700px) {{
       .paper {{ width:100%; margin:0; box-shadow:none; }}
       .masthead, article {{ padding-left:22px; padding-right:22px; }}
       h1 {{ font-size:29px; }}
       figure {{ margin-left:0; margin-right:0; }}
-      .lineage-explorer {{ width:calc(100vw - 20px); }}
+      .lineage-explorer {{ width:100%; }}
       .lineage-detail {{ max-height:none; }}
       footer {{ padding-left:22px; padding-right:22px; }}
     }}
@@ -267,7 +266,6 @@ def build() -> None:
   <main class="paper">
     <header class="masthead">
       <h1>{html.escape(title)}</h1>
-      <div class="byline">{html.escape(author)}</div>
     </header>
     <article>{body}</article>
     <footer>Research report prepared from Atlas experiment records and recorded Crafter episodes. Training world: seed 105.</footer>

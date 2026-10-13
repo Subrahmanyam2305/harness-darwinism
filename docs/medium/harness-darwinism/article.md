@@ -1,7 +1,5 @@
 # Harness Darwinism: Evolving Agent Harnesses with Genetic Algorithms
 
-**Suryaprakash Senthil Kumar and Subrahmanyam Arunachalam**
-
 ## 1. Introduction
 
 As frontier models become more capable of completing tasks from single-shot prompts, the natural extension is to ask whether they can also improve performance across repeated attempts without changing their weights.
