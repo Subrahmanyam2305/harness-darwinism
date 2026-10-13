@@ -91,7 +91,7 @@
 <ol><li><strong>Initialization:</strong> The process starts with an initial set of candidates that take part in evolution. These candidates can be considered the <em>seeds</em>.</li><li><strong>Fitness evaluation:</strong> Every candidate is evaluated using a fitness function and assigned a score.</li><li><strong>Selection:</strong> Candidates are selected through a process similar to a roulette wheel, where the probability of selection is proportional to their fitness scores.</li><li><strong>Crossover:</strong> This is the crux of evolution, where two strong candidates cross to produce an offspring that can inherit dominant traits from either parent.</li><li><strong>Mutation:</strong> After crossover, a small part of the offspring's genome is randomly updated to preserve diversity among the new candidates.</li></ol>
 <p>The next population contains survivors and children. Repeating this cycle searches the genome space without testing every possible genome.</p>
 <h3>2.2 Our method</h3>
-<p>In Harness Darwinism, each agent harness is represented as a genome whose rules, memory policy, action interface, and context budget can be changed and validated by the evolution loop.</p>
+<p>We evaluated Harness Darwinism in Crafter, a procedurally generated 2D survival environment, and represented each agent harness as a genome whose rules, memory policy, action interface, and context budget could be changed and validated by the evolution loop.</p>
 <pre data-language="json"><code>{
   &quot;system_prompt&quot;: &quot;You are a Crafter survival agent...&quot;,
   &quot;rules&quot;: [

@@ -28,7 +28,7 @@ The next population contains survivors and children. Repeating this cycle search
 
 ### 2.2 Our method
 
-In Harness Darwinism, each agent harness is represented as a genome whose rules, memory policy, action interface, and context budget can be changed and validated by the evolution loop.
+We evaluated Harness Darwinism in Crafter, a procedurally generated 2D survival environment, and represented each agent harness as a genome whose rules, memory policy, action interface, and context budget could be changed and validated by the evolution loop.
 
 ```json
 {
