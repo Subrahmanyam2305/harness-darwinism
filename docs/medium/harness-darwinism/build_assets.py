@@ -518,20 +518,8 @@ def build_score_chart() -> None:
     metrics = json.loads((ROOT / "evidence.json").read_text())["metrics"]
     canvas = Image.new("RGB", (1200 * SCALE, 650 * SCALE), PAPER)
     draw = ImageDraw.Draw(canvas)
-    draw.text(
-        (65 * SCALE, 42 * SCALE),
-        "Fitness across eight generations",
-        fill=INK,
-        font=font(30, serif=True),
-    )
-    draw.text(
-        (65 * SCALE, 88 * SCALE),
-        "One training world (seed 105). Every episode used a 200-step budget.",
-        fill=MUTED,
-        font=font(15),
-    )
 
-    left, top, right, bottom = 100, 145, 1135, 555
+    left, top, right, bottom = 100, 65, 1135, 555
     for value in range(7):
         y = bottom - (value / 6) * (bottom - top)
         draw.line(
@@ -592,7 +580,7 @@ def build_score_chart() -> None:
         anchor="mm",
     )
 
-    legend_y = 122
+    legend_y = 35
     for start_x, color, label in ((825, RED, "Best"), (970, TEAL, "Mean")):
         draw.line(
             (
