@@ -14,9 +14,11 @@ The experiment used one training world. It did not include held-out evaluation. 
 
 ## 1. Introduction
 
-Many agent systems store past trials in a separate memory. They retrieve useful lessons into working context when a similar task appears. The model weights stay fixed, but the next attempt receives better evidence.
+As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve recursively as they gathered evidence in an unfamiliar environment.
 
-This raises a broader question: if an agent can inherit memories, can it also inherit a better harness?
+Many agent systems approach this problem by storing past trials and trajectories in external memory. They retrieve relevant evidence into working context when similar tasks appear. The model weights stay fixed, but each attempt starts with better evidence.
+
+This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?
 
 The project began during the Harness Engineering and Model Wrangling Hackathon. We used its recursive self-improvement theme to test this question in Crafter.
 

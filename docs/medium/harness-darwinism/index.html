@@ -87,8 +87,9 @@
 <p>At a fixed budget of 85 actions, best fitness rose by 41.1%. Mean fitness rose by 44.2%. A later 200-action phase reached a training score of 5.606 and nine unlocked achievements.</p>
 <p>The experiment used one training world. It did not include held-out evaluation. The result shows a working evolution loop and a measurable training gain. It does not show generalization.</p>
 <h2 id="1-introduction">1. Introduction</h2>
-<p>Many agent systems store past trials in a separate memory. They retrieve useful lessons into working context when a similar task appears. The model weights stay fixed, but the next attempt receives better evidence.</p>
-<p>This raises a broader question: if an agent can inherit memories, can it also inherit a better harness?</p>
+<p>As frontier models become more capable of completing tasks from single-shot prompts, we wanted to test whether they could also improve recursively as they gathered evidence in an unfamiliar environment.</p>
+<p>Many agent systems approach this problem by storing past trials and trajectories in external memory. They retrieve relevant evidence into working context when similar tasks appear. The model weights stay fixed, but each attempt starts with better evidence.</p>
+<p>This raised a broader question: if an agent can inherit memories, can it also inherit a better harness?</p>
 <p>The project began during the Harness Engineering and Model Wrangling Hackathon. We used its recursive self-improvement theme to test this question in Crafter.</p>
 <p>We treated the harness as a genome. Each genome described the rules, memory policy, action interface, and context budget used by one agent. A population of genomes competed on the same task.</p>
 <p>The environment supplied a fitness score. High-scoring genomes survived. A second model combined two parents and made one mutation based on their failures.</p>
