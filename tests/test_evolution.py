@@ -10,6 +10,7 @@ from src.evolution import (
     _novelty_fallback,
     _resume_seeds,
     evaluate_genome,
+    evaluate_population,
     run_generation,
     seed_population,
 )
@@ -69,7 +70,7 @@ def test_agent_error_becomes_zero_fitness_and_keeps_trace(monkeypatch) -> None:
 def test_evolution_episode_records_frames_and_gif(monkeypatch, tmp_path) -> None:
     genome = Genome(id="recorded-candidate")
 
-    def fake_play(genome, seed, max_steps, *, on_frame):
+    def fake_play(genome, seed, max_steps, *, on_frame, **kwargs):
         on_frame(
             EpisodeFrame(
                 step=0,
@@ -143,7 +144,7 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
     mutation_calls = 0
     ledger_hashes: set[str] = set()
 
-    def fake_evaluate(genome, seeds, *, max_steps=None):
+    def fake_evaluate(genome, seeds, *, max_steps=None, **kwargs):
         score = float(original_ids.index(genome.id) + 1)
         trace = EpisodeTrace(
             genome_id=genome.id,
@@ -209,3 +210,41 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
     assert len(ledger_hashes) == 2
     assert all(genome.status == "archived" for genome in population)
     assert {genome.id for genome in persisted}.issuperset(original_ids)
+
+
+def test_concurrent_population_evaluation_preserves_population_order(
+    monkeypatch,
+) -> None:
+    population = seed_population(3, experiment_id="parallel")
+
+    def fake_evaluate(
+        genome,
+        seeds,
+        *,
+        max_steps=None,
+        record_frames=True,
+        controller="primitive",
+        max_skill_steps=5,
+    ):
+        score = float(
+            {population[0].id: 3, population[1].id: 1, population[2].id: 2}[genome.id]
+        )
+        return Fitness(score=score), [
+            EpisodeTrace(genome.id, seeds[0], score, {}, max_steps or 1)
+        ]
+
+    monkeypatch.setattr("src.evolution.evaluate_genome", fake_evaluate)
+
+    results = evaluate_population(
+        population,
+        [105],
+        max_steps=10,
+        workers=3,
+        controller="skills",
+        max_skill_steps=3,
+    )
+
+    assert [genome.id for genome, _, _ in results] == [
+        genome.id for genome in population
+    ]
+    assert [fitness.score for _, fitness, _ in results] == [3.0, 1.0, 2.0]

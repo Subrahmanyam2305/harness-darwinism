@@ -6,6 +6,7 @@ import numpy as np
 
 from src.agent import play_episode
 from src.crafter_env import CrafterSnapshot, NearbyEntity
+from src.gameplay_provider import ProviderError
 from src.genome import Genome, GenomeConfig
 
 
@@ -193,3 +194,29 @@ def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -
     assert "thought" not in captured[1][0]["content"].lower()
     assert "Execution state" in captured[1][1]["content"]
     assert [message["role"] for message in captured[1]] == ["system", "user"]
+
+
+def test_retryable_provider_failure_uses_bounded_backoff(monkeypatch) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr("src.agent.sleep", waits.append)
+    monkeypatch.setattr("src.agent.uniform", lambda low, high: high / 2)
+
+    class RetryingProvider:
+        name = "retrying"
+        is_stub = True
+
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, messages):
+            self.calls += 1
+            if self.calls == 1:
+                raise ProviderError("throttled", retryable=True)
+            return FakeReply('{"action":"noop"}')
+
+    trace = play_episode(
+        Genome(id="retry"), seed=42, max_steps=1, provider=RetryingProvider()
+    )
+
+    assert trace.steps == 1
+    assert waits == [0.5]

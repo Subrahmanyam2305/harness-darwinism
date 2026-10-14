@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from random import uniform
+from time import sleep
 from typing import Literal
 
 import numpy as np
@@ -261,9 +263,11 @@ def _play_skill_episode(
                 "model": None,
                 "reply": None,
             }
+            provider_failure: ProviderError | None = None
             try:
                 reply = provider.complete(messages)
-            except ProviderError:
+            except ProviderError as error:
+                provider_failure = error
                 attempt["error"] = "provider_error"
             else:
                 last_model = reply.model
@@ -291,6 +295,11 @@ def _play_skill_episode(
             decision_attempts.append(attempt)
             if parsed is not None:
                 break
+            if provider_failure is not None:
+                if not provider_failure.retryable:
+                    break
+                if attempt_number < 3:
+                    sleep(uniform(0, min(20.0, 2.0 ** (attempt_number - 1))))
             messages = [
                 system_message,
                 user_message,
@@ -502,9 +511,11 @@ def play_episode(
                 "model": None,
                 "reply": None,
             }
+            provider_failure: ProviderError | None = None
             try:
                 reply = provider.complete(messages)
-            except ProviderError:
+            except ProviderError as error:
+                provider_failure = error
                 attempt["error"] = "provider_error"
             else:
                 reply_text = reply.text
@@ -528,6 +539,11 @@ def play_episode(
             attempts.append(attempt)
             if action is not None:
                 break
+            if provider_failure is not None:
+                if not provider_failure.retryable:
+                    break
+                if attempt_number < 3:
+                    sleep(uniform(0, min(20.0, 2.0 ** (attempt_number - 1))))
             messages = [
                 *messages,
                 {

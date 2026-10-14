@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -11,7 +12,7 @@ import numpy as np
 from rich.console import Console
 from rich.table import Table
 
-from src.agent import EpisodeTrace, play_episode
+from src.agent import ControllerMode, EpisodeTrace, play_episode
 from src.config import settings
 from src.db import (
     ensure_indexes,
@@ -212,6 +213,8 @@ def evaluate_genome(
     *,
     max_steps: int | None = None,
     record_frames: bool = True,
+    controller: ControllerMode = "primitive",
+    max_skill_steps: int = 5,
 ) -> tuple[Fitness, list[EpisodeTrace]]:
     """Play multiple seeds, return aggregate fitness and traces."""
     traces: list[EpisodeTrace] = []
@@ -246,6 +249,8 @@ def evaluate_genome(
                     else settings.max_steps_per_episode
                 ),
                 on_frame=recorder.on_frame if recorder else None,
+                controller=controller,
+                max_skill_steps=max_skill_steps,
             )
         except Exception:
             if recorder:
@@ -274,6 +279,37 @@ def evaluate_genome(
     return fitness, traces
 
 
+def evaluate_population(
+    population: list[Genome],
+    seeds: list[int],
+    *,
+    max_steps: int | None = None,
+    workers: int = 1,
+    controller: ControllerMode = "primitive",
+    max_skill_steps: int = 5,
+) -> list[tuple[Genome, Fitness, list[EpisodeTrace]]]:
+    """Evaluate genomes concurrently while preserving population order."""
+    if workers <= 0:
+        raise ValueError("workers must be positive")
+    if not population:
+        return []
+
+    def evaluate(genome: Genome) -> tuple[Genome, Fitness, list[EpisodeTrace]]:
+        fitness, traces = evaluate_genome(
+            genome,
+            seeds,
+            max_steps=max_steps,
+            controller=controller,
+            max_skill_steps=max_skill_steps,
+        )
+        return genome, fitness, traces
+
+    if workers == 1:
+        return [evaluate(genome) for genome in population]
+    with ThreadPoolExecutor(max_workers=min(workers, len(population))) as executor:
+        return list(executor.map(evaluate, population))
+
+
 def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
     """Build the complete Atlas evidence document for one evaluated episode."""
     return {
@@ -296,6 +332,11 @@ def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
         "output_tokens": trace.output_tokens,
         "cost_usd": trace.cost_usd,
         "latency_seconds": trace.latency_seconds,
+        "controller": trace.controller,
+        "decisions": trace.decisions,
+        "model_calls": trace.model_calls,
+        "cache_read_tokens": trace.cache_read_tokens,
+        "cache_write_tokens": trace.cache_write_tokens,
         "harness": trace.harness,
         "artifact_path": trace.artifact_path,
         "arm": genome.arm,
@@ -406,6 +447,9 @@ def run_generation(
     max_steps: int | None = None,
     max_mutation_attempts: int = 3,
     reuse_completed: bool = False,
+    workers: int = 1,
+    controller: ControllerMode = "primitive",
+    max_skill_steps: int = 5,
 ) -> list[Genome]:
     """Execute one full generation of the GA."""
     if db is None:
@@ -428,6 +472,7 @@ def run_generation(
 
     # 1. Evaluate
     console.print("[bold]Phase 1: Evaluate[/bold]")
+    pending: list[Genome] = []
     for genome in population:
         console.print(f"\n[cyan]{genome.id}[/cyan] ({len(genome.genome.rules)} rules)")
         if reuse_completed:
@@ -448,7 +493,16 @@ def run_generation(
                     f"Cannot resume partially evaluated seed set for {genome.id}: "
                     f"stored={sorted(completed_seeds)}, requested={sorted(requested_seeds)}"
                 )
-        fitness, traces = evaluate_genome(genome, seeds, max_steps=max_steps)
+        pending.append(genome)
+
+    for genome, fitness, traces in evaluate_population(
+        pending,
+        seeds,
+        max_steps=max_steps,
+        workers=workers,
+        controller=controller,
+        max_skill_steps=max_skill_steps,
+    ):
         genome.fitness = fitness
 
         for trace in traces:
@@ -607,6 +661,9 @@ def run_evolution(
     max_steps: int | None = None,
     resume: bool = False,
     seed_profile: SeedProfile = "legacy",
+    controller: ControllerMode = "primitive",
+    workers: int = 1,
+    max_skill_steps: int = 5,
 ) -> Genome:
     """Run new or resumed evolutionary transitions and return the latest champion."""
     db = get_db()
@@ -636,6 +693,10 @@ def run_evolution(
         raise ValueError("survivors must be between 1 and population_size - 1")
     if step_limit <= 0:
         raise ValueError("max_steps must be positive")
+    if workers <= 0:
+        raise ValueError("workers must be positive")
+    if not 1 <= max_skill_steps <= 5:
+        raise ValueError("max_skill_steps must be between 1 and 5")
     if seed_count <= 0 or seed_count > len(all_train_seeds):
         raise ValueError("seeds_per_generation must fit within train_seeds")
     existing_genomes = get_all_genomes(db, arm=experiment_id)
@@ -692,12 +753,21 @@ def run_evolution(
             n_survivors=survivor_count,
             max_steps=step_limit,
             reuse_completed=resume and offset == 0,
+            workers=workers,
+            controller=controller,
+            max_skill_steps=max_skill_steps,
         )
 
     # Evaluate offspring before crowning a champion.
     final_generation = start_generation + max_gen
-    for genome in population:
-        fitness, traces = evaluate_genome(genome, shared_seeds, max_steps=step_limit)
+    for genome, fitness, traces in evaluate_population(
+        population,
+        shared_seeds,
+        max_steps=step_limit,
+        workers=workers,
+        controller=controller,
+        max_skill_steps=max_skill_steps,
+    ):
         genome.fitness = fitness
         for trace in traces:
             insert_run(db, _run_document(genome, trace, final_generation))

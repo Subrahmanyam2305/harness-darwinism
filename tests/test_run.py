@@ -24,9 +24,15 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(monkeypatch) -
         resume=False,
         seed_profile="strong-v2",
         train_seeds=[105],
+        controller="skills",
+        workers=3,
+        max_skill_steps=4,
     )
 
     run.cmd_evolve(args)
 
     assert captured["seed_profile"] == "strong-v2"
     assert captured["train_seeds"] == [105]
+    assert captured["controller"] == "skills"
+    assert captured["workers"] == 3
+    assert captured["max_skill_steps"] == 4

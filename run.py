@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from datetime import UTC, datetime
@@ -19,6 +20,20 @@ def cmd_evolve(args):
     """Run the full evolution loop."""
     from src.evolution import run_evolution
 
+    episode_count = args.population * args.seeds_per_generation * (args.generations + 1)
+    primitive_upper_bound = episode_count * args.max_steps
+    console.print(
+        "[bold]Experiment call estimate[/bold]\n"
+        f"  controller: {args.controller}\n"
+        f"  workers: {args.workers}\n"
+        f"  primitive upper bound: {primitive_upper_bound:,} gameplay calls"
+    )
+    if args.controller == "skills":
+        console.print(
+            "  optimistic full-chunk estimate: "
+            f"{episode_count * math.ceil(args.max_steps / args.max_skill_steps):,} "
+            "gameplay calls (actual calls depend on interruptions and retries)"
+        )
     champion = run_evolution(
         max_generations=args.generations,
         train_seeds=args.train_seeds,
@@ -29,6 +44,9 @@ def cmd_evolve(args):
         max_steps=args.max_steps,
         resume=args.resume,
         seed_profile=args.seed_profile,
+        controller=args.controller,
+        workers=args.workers,
+        max_skill_steps=args.max_skill_steps,
     )
     console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
@@ -208,6 +226,24 @@ def main():
         help="Generation-zero harness initialization profile",
     )
     p_evolve.add_argument("--max-steps", type=int, default=100)
+    p_evolve.add_argument(
+        "--controller",
+        choices=["primitive", "skills"],
+        default="primitive",
+        help="Gameplay controller used for every candidate episode",
+    )
+    p_evolve.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Maximum candidate episodes evaluated concurrently",
+    )
+    p_evolve.add_argument(
+        "--max-skill-steps",
+        type=int,
+        default=5,
+        help="Maximum local Crafter actions per skill decision (1-5)",
+    )
     p_evolve.add_argument(
         "--resume",
         action="store_true",

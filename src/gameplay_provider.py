@@ -29,6 +29,10 @@ class ModelReply:
 class ProviderError(RuntimeError):
     """Safe expected inference failure with no credential-bearing message."""
 
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+
 
 class GameplayProvider(Protocol):
     """Boundary that lets gameplay run independently of a model transport."""
@@ -69,8 +73,19 @@ class BedrockProvider:
                 temperature=0.0,
                 cache_system=cache_system,
             )
-        except (BotoCoreError, ClientError) as error:
-            raise ProviderError("Bedrock inference failed") from error
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "")
+            retryable = code in {
+                "ThrottlingException",
+                "ServiceUnavailableException",
+                "InternalServerException",
+                "ModelNotReadyException",
+            }
+            raise ProviderError(
+                "Bedrock inference failed", retryable=retryable
+            ) from error
+        except BotoCoreError as error:
+            raise ProviderError("Bedrock inference failed", retryable=True) from error
         return ModelReply(
             text=response.text,
             model=response.model,
