@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 
@@ -10,6 +12,7 @@ from src.agent import EpisodeTrace, play_episode
 from src.crafter_env import ALL_ACHIEVEMENTS
 from src.gameplay_provider import GameplayProvider
 from src.genome import Genome
+from src.recording import EpisodeRecorder
 
 
 @dataclass
@@ -22,11 +25,25 @@ class EvaluationResult:
     score: float | None
     achievement_rates: dict[str, float]
     mean_steps: float
+    environment_steps: int
+    model_calls: int
+    steps_per_model_call: float | None
     input_tokens: int | None
     output_tokens: int | None
+    tokens_per_environment_step: float | None
     cost_usd: float | None
+    latency_seconds: float
+    wall_clock_seconds: float | None
+    controller: str
+    episode_count: int
+    survival_count: int
+    incomplete_episodes: int
+    skill_interruptions: int
+    invalid_outputs: int
+    provider_errors: int
+    retries: int
     traces: list[EpisodeTrace]
-    schema_version: int = 1
+    schema_version: int = 2
 
     def to_dict(self) -> dict:
         """Return a JSON-compatible evaluation document."""
@@ -55,6 +72,24 @@ class PairedComparison:
         return asdict(self)
 
 
+@dataclass
+class ControllerComparison:
+    """Paired primitive-versus-skills evidence for one frozen harness."""
+
+    genome_id: str
+    seeds: list[int]
+    primitive: EvaluationResult
+    skills: EvaluationResult
+    model_call_delta: int
+    latency_delta_seconds: float
+    score_delta: float | None
+    schema_version: int = 1
+
+    def to_dict(self) -> dict:
+        """Return a JSON-compatible controller comparison document."""
+        return asdict(self)
+
+
 def crafter_score(achievement_rates: dict[str, float]) -> float:
     """Compute upstream score from achievement success rates in [0, 1]."""
     percents = np.array(
@@ -75,7 +110,9 @@ def _total_if_complete(
     return sum(values)
 
 
-def summarize_traces(traces: list[EpisodeTrace]) -> EvaluationResult:
+def summarize_traces(
+    traces: list[EpisodeTrace], *, wall_clock_seconds: float | None = None
+) -> EvaluationResult:
     """Aggregate episodes; any agent error makes the batch incomplete."""
     if not traces:
         raise ValueError("At least one episode trace is required")
@@ -94,6 +131,28 @@ def summarize_traces(traces: list[EpisodeTrace]) -> EvaluationResult:
         for achievement in ALL_ACHIEVEMENTS
     }
     complete = all(trace.termination_reason != "agent_error" for trace in traces)
+    environment_steps = sum(trace.steps for trace in traces)
+    model_calls = sum(trace.model_calls for trace in traces)
+    input_tokens = _total_if_complete(traces, "input_tokens")
+    output_tokens = _total_if_complete(traces, "output_tokens")
+    controller = traces[0].controller
+    if any(trace.controller != controller for trace in traces):
+        raise ValueError("Evaluation traces must use one controller")
+    invalid_outputs = sum(
+        attempt.get("error") == "invalid_output"
+        for trace in traces
+        for attempt in trace.attempts
+    )
+    provider_errors = sum(
+        attempt.get("error") == "provider_error"
+        for trace in traces
+        for attempt in trace.attempts
+    )
+    retries = sum(
+        int(attempt.get("attempt", 1)) > 1
+        for trace in traces
+        for attempt in trace.attempts
+    )
     return EvaluationResult(
         genome_id=traces[0].genome_id,
         seeds=seeds,
@@ -101,9 +160,37 @@ def summarize_traces(traces: list[EpisodeTrace]) -> EvaluationResult:
         score=crafter_score(rates) if complete else None,
         achievement_rates=rates,
         mean_steps=float(np.mean([trace.steps for trace in traces])),
-        input_tokens=_total_if_complete(traces, "input_tokens"),
-        output_tokens=_total_if_complete(traces, "output_tokens"),
+        environment_steps=environment_steps,
+        model_calls=model_calls,
+        steps_per_model_call=(
+            environment_steps / model_calls if model_calls > 0 else None
+        ),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        tokens_per_environment_step=(
+            (input_tokens + output_tokens) / environment_steps
+            if input_tokens is not None
+            and output_tokens is not None
+            and environment_steps > 0
+            else None
+        ),
         cost_usd=_total_if_complete(traces, "cost_usd"),
+        latency_seconds=float(sum(trace.latency_seconds for trace in traces)),
+        wall_clock_seconds=wall_clock_seconds,
+        controller=controller,
+        episode_count=len(traces),
+        survival_count=sum(trace.termination_reason != "death" for trace in traces),
+        incomplete_episodes=sum(
+            trace.termination_reason == "agent_error" for trace in traces
+        ),
+        skill_interruptions=sum(
+            decision.get("status") in {"failed", "interrupted", "exhausted"}
+            for trace in traces
+            for decision in trace.decisions
+        ),
+        invalid_outputs=invalid_outputs,
+        provider_errors=provider_errors,
+        retries=retries,
         traces=traces,
     )
 
@@ -114,15 +201,69 @@ def evaluate_harness(
     *,
     max_steps: int = 200,
     provider: GameplayProvider | None = None,
+    controller: str = "primitive",
+    max_skill_steps: int = 5,
+    artifact_root: Path | None = None,
 ) -> EvaluationResult:
     """Evaluate one unchanged harness on each explicit seed."""
     if not seeds:
         raise ValueError("At least one evaluation seed is required")
-    traces = [
-        play_episode(genome, seed, max_steps=max_steps, provider=provider)
-        for seed in seeds
-    ]
-    return summarize_traces(traces)
+    started = perf_counter()
+    traces: list[EpisodeTrace] = []
+    for seed in seeds:
+        recorder = (
+            EpisodeRecorder(
+                artifact_root / controller / f"seed-{seed}",
+                label=f"Controller comparison · {controller} · seed {seed}",
+            )
+            if artifact_root is not None
+            else None
+        )
+        try:
+            trace = play_episode(
+                genome,
+                seed,
+                max_steps=max_steps,
+                provider=provider,
+                on_frame=recorder.on_frame if recorder else None,
+                controller=controller,
+                max_skill_steps=max_skill_steps,
+            )
+        except Exception:
+            if recorder:
+                recorder.fail("episode_exception")
+            raise
+        if recorder:
+            trace.artifact_path = str(recorder.path)
+            recorder.finish(trace)
+        traces.append(trace)
+    return summarize_traces(traces, wall_clock_seconds=perf_counter() - started)
+
+
+def compare_controllers(
+    primitive: EvaluationResult, skills: EvaluationResult
+) -> ControllerComparison:
+    """Compare two controller arms using the same harness and ordered seeds."""
+    if primitive.seeds != skills.seeds:
+        raise ValueError("Controller comparison requires identical ordered seeds")
+    if primitive.genome_id != skills.genome_id:
+        raise ValueError("Controller comparison requires one frozen harness")
+    if primitive.controller != "primitive" or skills.controller != "skills":
+        raise ValueError("Controller arms must be primitive then skills")
+    score_delta = (
+        skills.score - primitive.score
+        if primitive.score is not None and skills.score is not None
+        else None
+    )
+    return ControllerComparison(
+        genome_id=primitive.genome_id,
+        seeds=list(primitive.seeds),
+        primitive=primitive,
+        skills=skills,
+        model_call_delta=skills.model_calls - primitive.model_calls,
+        latency_delta_seconds=skills.latency_seconds - primitive.latency_seconds,
+        score_delta=score_delta,
+    )
 
 
 def compare_paired(

@@ -1,6 +1,7 @@
 """CLI command wiring checks that avoid provider and database calls."""
 
 from argparse import Namespace
+from pathlib import Path
 
 import run
 from src.genome import Genome
@@ -36,3 +37,52 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(monkeypatch) -
     assert captured["controller"] == "skills"
     assert captured["workers"] == 3
     assert captured["max_skill_steps"] == 4
+
+
+def test_compare_controllers_uses_identical_settings(monkeypatch, tmp_path) -> None:
+    calls: list[dict] = []
+    genome = Genome(id="candidate")
+
+    class Result:
+        complete = True
+        traces = ()
+
+        def to_dict(self):
+            return {"controller": calls[-1]["controller"]}
+
+    class Comparison:
+        model_call_delta = -3
+        latency_delta_seconds = -1.0
+
+        def to_dict(self):
+            return {"model_call_delta": self.model_call_delta}
+
+    def fake_evaluate(candidate, seeds, **kwargs):
+        calls.append({"genome": candidate.id, "seeds": seeds, **kwargs})
+        return Result()
+
+    monkeypatch.setattr("src.db.get_db", lambda: object())
+    monkeypatch.setattr("src.db.get_genome", lambda _db, _id: genome)
+    monkeypatch.setattr("src.db.insert_run", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("src.evaluator.evaluate_harness", fake_evaluate)
+    monkeypatch.setattr(
+        "src.evaluator.compare_controllers", lambda primitive, skills: Comparison()
+    )
+    output = tmp_path / "controllers.json"
+
+    run.cmd_compare_controllers(
+        Namespace(
+            genome_id="candidate",
+            seeds=[201, 202],
+            max_steps=80,
+            max_skill_steps=4,
+            output=Path(output),
+        )
+    )
+
+    assert [call["controller"] for call in calls] == ["primitive", "skills"]
+    assert all(call["seeds"] == [201, 202] for call in calls)
+    assert all(call["max_steps"] == 80 for call in calls)
+    assert calls[1]["max_skill_steps"] == 4
+    assert calls[0]["artifact_root"] == calls[1]["artifact_root"]
+    assert output.exists()

@@ -80,6 +80,11 @@ export interface RunSummary {
   steps_per_model_call?: number | null;
   tokens_per_environment_step?: number | null;
   latency_seconds?: number | null;
+  comparison_id?: string;
+  controller_arm?: string;
+  paired_seed?: number;
+  is_stub?: boolean;
+  provider?: string;
   decisions?: SkillDecision[];
   failure_summary: string;
   history_len: number;

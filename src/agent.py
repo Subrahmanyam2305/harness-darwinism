@@ -69,6 +69,7 @@ class EpisodeFrame:
     achievements: dict[str, bool]
     inventory: dict[str, int]
     is_stub: bool
+    decision_id: str | None = None
 
 
 class _Decision(BaseModel):
@@ -212,7 +213,7 @@ def _play_skill_episode(
     last_model: str | None = None
     empty_decisions = 0
 
-    def emit(action: str | None) -> None:
+    def emit(action: str | None, decision_id: str | None = None) -> None:
         if on_frame is None:
             return
         on_frame(
@@ -224,6 +225,7 @@ def _play_skill_episode(
                 achievements=environment.get_achievements(),
                 inventory=dict(environment.info.get("inventory", {})),
                 is_stub=provider.is_stub,
+                decision_id=decision_id,
             )
         )
 
@@ -350,7 +352,7 @@ def _play_skill_episode(
             )
             observation = step.observation
             step_observation = step.observation
-            emit(step.action)
+            emit(step.action, _decision_id)
 
         result = execute_skill(
             request,

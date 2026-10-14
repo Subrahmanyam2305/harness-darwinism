@@ -157,6 +157,13 @@ def _serialize_run(run: dict) -> dict:
             ),
             "decisions": trace.get("decisions", document.get("decisions", [])),
             "model_calls": model_calls,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "latency_seconds": trace.get(
+                "latency_seconds", document.get("latency_seconds")
+            ),
+            "provider": trace.get("provider", document.get("provider")),
+            "is_stub": trace.get("is_stub", document.get("is_stub")),
             "environment_steps": steps,
             "steps_per_model_call": steps_per_call,
             "tokens_per_environment_step": tokens_per_step,
@@ -186,9 +193,7 @@ def metrics(arm: str = "full"):
     if genomes:
         latest_generation = max(genome.generation for genome in genomes)
         latest_population = [
-            genome
-            for genome in genomes
-            if genome.generation == latest_generation
+            genome for genome in genomes if genome.generation == latest_generation
         ]
         evaluated = []
         seeds = set()
@@ -221,11 +226,7 @@ def metrics(arm: str = "full"):
                     else "evaluating"
                 ),
             }
-            rows = [
-                row
-                for row in rows
-                if row.get("generation") != latest_generation
-            ]
+            rows = [row for row in rows if row.get("generation") != latest_generation]
             rows.append(partial)
             rows.sort(key=lambda row: row.get("generation", 0))
     for r in rows:

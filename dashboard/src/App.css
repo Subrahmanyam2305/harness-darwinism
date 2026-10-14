@@ -375,6 +375,17 @@ main {
   margin-bottom: 18px;
 }
 
+.run-evidence-label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.run-evidence-label strong { color: var(--green); }
+
 .efficiency-strip > div {
   display: flex;
   flex-direction: column;
@@ -495,6 +506,12 @@ main {
 }
 
 .replay-decision code { color: var(--text-tertiary); }
+
+.replay-decision p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-tertiary);
+}
 
 .replay-thought {
   background: rgba(10, 132, 255, 0.08);

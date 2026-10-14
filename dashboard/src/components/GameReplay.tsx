@@ -76,6 +76,9 @@ export function GameReplay({ runs, genomeId }: Props) {
   }, [playing, steps.length]);
 
   const step = steps[currentStep];
+  const currentDecision = selectedRun?.decisions?.find(
+    (decision) => decision.decision_id === step?.decision_id
+  );
 
   if (!runs.length) return null;
 
@@ -112,14 +115,21 @@ export function GameReplay({ runs, genomeId }: Props) {
       </div>
 
       {selectedRun && (
+        <>
+        <div className="run-evidence-label">
+          <strong>{selectedRun.is_stub ? "OFFLINE STUB" : "LIVE LLM"}</strong>
+          {selectedRun.comparison_id && <span>Paired experiment: {selectedRun.comparison_id}</span>}
+          <span>Seed {selectedRun.paired_seed ?? selectedRun.seed}</span>
+        </div>
         <div className="efficiency-strip">
-          <div><span>Controller</span><strong>{selectedRun.controller ?? "primitive"}</strong></div>
+          <div><span>Controller</span><strong>{selectedRun.controller_arm ?? selectedRun.controller ?? "primitive"}</strong></div>
           <div><span>Model calls</span><strong>{selectedRun.model_calls ?? "Unavailable"}</strong></div>
           <div><span>Environment steps</span><strong>{selectedRun.environment_steps ?? selectedRun.steps}</strong></div>
           <div><span>Steps / call</span><strong>{selectedRun.steps_per_model_call?.toFixed(2) ?? "Unavailable"}</strong></div>
           <div><span>Tokens / step</span><strong>{selectedRun.tokens_per_environment_step?.toFixed(1) ?? "Unavailable"}</strong></div>
           <div><span>Latency</span><strong>{selectedRun.latency_seconds != null ? `${selectedRun.latency_seconds.toFixed(1)}s` : "Unavailable"}</strong></div>
         </div>
+        </>
       )}
 
       {/* Video + Text side by side */}
@@ -215,9 +225,13 @@ export function GameReplay({ runs, genomeId }: Props) {
                 <div className="replay-action">
                   {step.decision_id && (
                     <div className="replay-decision">
-                      <span>{step.skill ?? "skill"}</span>
+                      <span>
+                        {step.skill ?? "skill"}
+                        {currentDecision?.skill.target ? `: ${currentDecision.skill.target}` : ""}
+                      </span>
                       <code>{step.decision_id}</code>
                       {step.skill_status && <em>{step.skill_status}</em>}
+                      {currentDecision?.reason && <p>{currentDecision.reason}</p>}
                     </div>
                   )}
                   <div className="replay-action-badge">→ {step.action}</div>

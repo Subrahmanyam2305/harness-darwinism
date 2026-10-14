@@ -171,6 +171,71 @@ def cmd_compare(args):
     console.print(f"Evidence: {output}")
 
 
+def cmd_compare_controllers(args):
+    """Compare primitive and skill controllers on one frozen harness."""
+    from src.db import get_db, get_genome, insert_run
+    from src.evaluator import compare_controllers, evaluate_harness
+
+    database = get_db()
+    if database is None:
+        raise RuntimeError("Atlas is required for paired controller evidence")
+    genome = get_genome(database, args.genome_id)
+    if genome is None:
+        console.print(f"[red]Genome {args.genome_id} not found[/red]")
+        sys.exit(1)
+    seeds = args.seeds or list(range(200, 230))
+    comparison_id = (
+        f"controllers-{genome.id}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+    )
+    artifact_root = Path("data/runs/controller-comparisons") / comparison_id
+    common = {"max_steps": args.max_steps}
+    primitive = evaluate_harness(
+        genome,
+        seeds,
+        controller="primitive",
+        max_skill_steps=1,
+        artifact_root=artifact_root,
+        **common,
+    )
+    skills = evaluate_harness(
+        genome,
+        seeds,
+        controller="skills",
+        max_skill_steps=args.max_skill_steps,
+        artifact_root=artifact_root,
+        **common,
+    )
+    comparison = compare_controllers(primitive, skills)
+    for arm_result in (primitive, skills):
+        for trace in arm_result.traces:
+            insert_run(
+                database,
+                {
+                    "_id": f"{comparison_id}-{arm_result.controller}-s{trace.seed}",
+                    "kind": "controller_comparison_episode",
+                    "comparison_id": comparison_id,
+                    "controller_arm": arm_result.controller,
+                    "paired_seed": trace.seed,
+                    "genome_id": genome.id,
+                    "seed": trace.seed,
+                    "score": trace.score,
+                    "steps": trace.steps,
+                    "artifact_path": trace.artifact_path,
+                    "trace": trace.to_dict(),
+                    "created_at": datetime.now(UTC).isoformat(),
+                },
+            )
+    output = args.output or artifact_root / "comparison.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(comparison.to_dict(), indent=2))
+    console.print(
+        "[green]Paired controller comparison complete[/green]: "
+        f"calls {comparison.model_call_delta:+d}, "
+        f"latency {comparison.latency_delta_seconds:+.2f}s"
+    )
+    console.print(f"Evidence: {output}")
+
+
 def cmd_serve(args):
     """Start the API server."""
     import uvicorn
@@ -279,6 +344,17 @@ def main():
     p_compare.add_argument("--max-steps", type=int, default=200)
     p_compare.add_argument("--output", type=Path)
     p_compare.set_defaults(func=cmd_compare)
+
+    p_controllers = sub.add_parser(
+        "compare-controllers",
+        help="Compare primitive and skill control on the same genome and seeds",
+    )
+    p_controllers.add_argument("genome_id")
+    p_controllers.add_argument("--seeds", type=int, nargs="+")
+    p_controllers.add_argument("--max-steps", type=int, default=200)
+    p_controllers.add_argument("--max-skill-steps", type=int, default=5)
+    p_controllers.add_argument("--output", type=Path)
+    p_controllers.set_defaults(func=cmd_compare_controllers)
 
     p_serve = sub.add_parser("serve", help="Start the dashboard API")
     p_serve.add_argument("-p", "--port", type=int, default=8001)

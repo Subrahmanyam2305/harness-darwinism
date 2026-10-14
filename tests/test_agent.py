@@ -138,6 +138,7 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
             )
         ]
     )
+    frames = []
 
     trace = play_episode(
         Genome(id="skills", genome=GenomeConfig(tools=["move_right", "do"])),
@@ -145,6 +146,7 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
         max_steps=2,
         provider=provider,
         controller="skills",
+        on_frame=frames.append,
     )
 
     assert trace.steps == 2
@@ -155,6 +157,7 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
     assert trace.decisions[0]["skill"]["name"] == "acquire"
     assert trace.decisions[0]["actions"] == ["move_right", "do"]
     assert trace.decisions[0]["status"] in {"succeeded", "terminal"}
+    assert {frame.decision_id for frame in frames[1:]} == {"decision-1"}
 
 
 def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -> None:

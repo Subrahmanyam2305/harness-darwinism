@@ -87,6 +87,7 @@ class EpisodeRecorder:
                 "observation": frame.observation,
                 "achievements": frame.achievements,
                 "inventory": frame.inventory,
+                "decision_id": frame.decision_id,
             }
         )
         self._publish("playing")
