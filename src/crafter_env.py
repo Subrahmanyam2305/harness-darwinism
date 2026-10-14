@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import crafter
 import numpy as np
+from pydantic import BaseModel, Field
 
 ACTIONS = [
     "noop",
@@ -100,6 +101,56 @@ SEMANTIC_SYMBOLS = {
     17: ">",
     18: "P",
 }
+
+
+class NearbyEntity(BaseModel):
+    """One notable object relative to the player in the current semantic view."""
+
+    kind: str
+    direction: str
+    distance: int = Field(ge=0)
+    dx: int
+    dy: int
+
+
+class CrafterSnapshot(BaseModel):
+    """Structured current environment state used by deterministic skill guards."""
+
+    step: int = Field(ge=0)
+    inventory: dict[str, int]
+    achievements: dict[str, bool]
+    nearby_entities: list[NearbyEntity]
+    facing: str
+    daylight: float
+    sleeping: bool
+
+
+def _nearby_entities(info: dict) -> list[NearbyEntity]:
+    semantic = info.get("semantic")
+    player_pos = info.get("player_pos")
+    if semantic is None or player_pos is None:
+        return []
+    px, py = int(player_pos[0]), int(player_pos[1])
+    entities: list[NearbyEntity] = []
+    for dy in range(-3, 4):
+        for dx in range(-4, 5):
+            if dx == 0 and dy == 0:
+                continue
+            x, y = px + dx, py + dy
+            if not (0 <= x < semantic.shape[0] and 0 <= y < semantic.shape[1]):
+                continue
+            name = SEMANTIC_NAMES.get(int(semantic[x, y]))
+            if name and name not in {"grass", "path"}:
+                entities.append(
+                    NearbyEntity(
+                        kind=name,
+                        direction=_direction(dy, dx),
+                        distance=max(abs(dy), abs(dx)),
+                        dx=dx,
+                        dy=dy,
+                    )
+                )
+    return sorted(entities, key=lambda entity: (entity.distance, entity.kind))
 
 
 def _info_to_text(info: dict, step: int) -> str:
@@ -294,6 +345,24 @@ class CrafterTextEnv:
 
     def get_achievements(self) -> dict[str, bool]:
         return dict(self._achievements)
+
+    def snapshot(self) -> CrafterSnapshot:
+        """Return the current structured state without advancing or rendering."""
+        inventory = {
+            key: int(value)
+            for key, value in self.info.get("inventory", {}).items()
+            if isinstance(value, (int, float, np.integer, np.floating))
+        }
+        facing = self.info.get("facing", (0, 0))
+        return CrafterSnapshot(
+            step=self._step_count,
+            inventory=inventory,
+            achievements=self.get_achievements(),
+            nearby_entities=_nearby_entities(self.info),
+            facing=_direction(int(facing[1]), int(facing[0])),
+            daylight=float(self.info.get("daylight", 1.0)),
+            sleeping=bool(self.info.get("sleeping", False)),
+        )
 
     @property
     def step_count(self) -> int:
