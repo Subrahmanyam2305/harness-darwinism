@@ -3,7 +3,7 @@
 import json
 
 from src.genome import GenomeConfig
-from src.meta_agent import llm_crossover
+from src.meta_agent import llm_crossover, llm_mutate
 
 
 def test_crossover_retries_invalid_response_and_records_recovery(monkeypatch) -> None:
@@ -52,3 +52,31 @@ def test_crossover_falls_back_only_after_all_attempts(monkeypatch) -> None:
     assert child == parent_a
     assert "failed after 3 attempts" in note
     assert note.count("no JSON object found") == 3
+
+
+def test_failed_mutation_identifies_the_retained_crossover_configuration(
+    monkeypatch,
+) -> None:
+    crossover = GenomeConfig(rules=["Crossover rule"])
+    monkeypatch.setattr("src.meta_agent.chat", lambda **kwargs: "invalid")
+
+    child, note = llm_mutate(crossover, [])
+
+    assert child == crossover
+    assert note == "mutation failed — kept crossover configuration"
+
+
+def test_noop_mutation_is_rejected_as_failed(monkeypatch) -> None:
+    crossover = GenomeConfig(rules=["Crossover rule"])
+    response = json.dumps(
+        {
+            "config": crossover.model_dump(),
+            "mutation_note": "Claimed an improvement without changing anything.",
+        }
+    )
+    monkeypatch.setattr("src.meta_agent.chat", lambda **kwargs: response)
+
+    child, note = llm_mutate(crossover, [])
+
+    assert child == crossover
+    assert note == "mutation failed — no configuration change"

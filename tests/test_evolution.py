@@ -11,12 +11,74 @@ from src.evolution import (
     _novelty_fallback,
     _resume_seeds,
     _validate_resume_evidence,
+    calculate_elite_count,
     evaluate_genome,
     evaluate_population,
+    rank_selection_weights,
+    run_evolution,
     run_generation,
     seed_population,
+    weighted_pairs,
 )
 from src.genome import Fitness, Genome, GenomeConfig
+
+
+def test_elite_ratio_creates_three_elites_and_seven_children_for_population_ten() -> (
+    None
+):
+    assert calculate_elite_count(10, 0.3) == 3
+
+
+def test_elite_count_keeps_at_least_one_elite_and_one_child() -> None:
+    assert calculate_elite_count(2, 0.01) == 1
+    assert calculate_elite_count(4, 0.99) == 3
+    with pytest.raises(ValueError, match="elite_ratio"):
+        calculate_elite_count(10, 0)
+
+
+def test_rank_selection_weights_include_every_candidate_and_favor_higher_rank() -> None:
+    population = [
+        Genome(id=f"g{index}", fitness=Fitness(score=score))
+        for index, score in enumerate([0.0, 0.0, 1.0, 2.0])
+    ]
+
+    weights = rank_selection_weights(population)
+
+    assert set(weights) == {"g0", "g1", "g2", "g3"}
+    assert all(weight > 0 for weight in weights.values())
+    assert weights["g3"] > weights["g2"] > weights["g0"]
+    assert weights["g0"] == weights["g1"]
+
+
+def test_rank_weighted_pairing_is_reproducible_and_never_self_pairs() -> None:
+    import random
+
+    population = [
+        Genome(id=f"g{index}", fitness=Fitness(score=float(index)))
+        for index in range(10)
+    ]
+
+    first = weighted_pairs(population, 50, rng=random.Random(17))
+    second = weighted_pairs(population, 50, rng=random.Random(17))
+
+    assert [(a.id, b.id) for a, b in first] == [(a.id, b.id) for a, b in second]
+    assert all(a.id != b.id for a, b in first)
+    assert all(a.fitness.score >= b.fitness.score for a, b in first)
+
+
+def test_invalid_evolution_policy_fails_before_atlas_access(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.evolution.get_db",
+        lambda: pytest.fail("Atlas must not be accessed for invalid configuration"),
+    )
+
+    with pytest.raises(ValueError, match="mutation_rate"):
+        run_evolution(
+            max_generations=1,
+            population_size=10,
+            elite_ratio=0.3,
+            mutation_rate=1.1,
+        )
 
 
 def test_strong_v2_seed_population_is_deterministic_and_scoped() -> None:
@@ -160,6 +222,15 @@ def test_duplicate_llm_mutation_gets_deterministic_novelty_fallback(
     assert len(added) == 1
 
 
+def test_novelty_fallback_refuses_to_accept_a_duplicate_configuration(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("src.evolution.ledger_check", lambda db, edit_hash: True)
+
+    with pytest.raises(RuntimeError, match="unique genome"):
+        _novelty_fallback(object(), GenomeConfig(), "Repeated strategy.")
+
+
 def test_generation_preserves_lineage_population_and_retries_duplicates(
     monkeypatch,
 ) -> None:
@@ -196,7 +267,6 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
         ),
     )
     monkeypatch.setattr("src.evolution.llm_mutate", fake_mutate)
-    monkeypatch.setattr("src.evolution.get_archive", lambda db, arm: [])
     monkeypatch.setattr("src.evolution.get_failure_traces", lambda db, genome_id: [])
     monkeypatch.setattr("src.evolution.insert_run", lambda db, document: None)
     monkeypatch.setattr("src.evolution.record_metrics", lambda *args, **kwargs: None)
@@ -220,6 +290,7 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
         db=object(),
         population_size=4,
         n_survivors=2,
+        mutation_rate=1.0,
         max_steps=10,
     )
 
@@ -235,6 +306,129 @@ def test_generation_preserves_lineage_population_and_retries_duplicates(
     assert len(ledger_hashes) == 2
     assert all(genome.status == "archived" for genome in population)
     assert {genome.id for genome in persisted}.issuperset(original_ids)
+
+
+def test_generation_uses_thirty_percent_elites_and_skips_unsampled_mutation(
+    monkeypatch,
+) -> None:
+    population = seed_population(10, experiment_id="ratio-policy")
+    original_ids = [genome.id for genome in population]
+    mutation_calls = 0
+    crossover_calls = 0
+    ledger_hashes: set[str] = set()
+
+    def fake_evaluate(genome, seeds, **kwargs):
+        score = float(original_ids.index(genome.id))
+        return Fitness(score=score), [
+            EpisodeTrace(
+                genome_id=genome.id,
+                seed=seeds[0],
+                score=score,
+                achievements={},
+                steps=1,
+            )
+        ]
+
+    def fake_crossover(parent_a, parent_b):
+        nonlocal crossover_calls
+        crossover_calls += 1
+        return GenomeConfig(rules=[f"cross-{crossover_calls}"]), "crossed"
+
+    def fake_mutate(config, failure_traces, tried_edits=None):
+        nonlocal mutation_calls
+        mutation_calls += 1
+        return config, "mutated"
+
+    monkeypatch.setattr("src.evolution.evaluate_genome", fake_evaluate)
+    monkeypatch.setattr("src.evolution.llm_crossover", fake_crossover)
+    monkeypatch.setattr("src.evolution.llm_mutate", fake_mutate)
+    monkeypatch.setattr("src.evolution.get_failure_traces", lambda db, genome_id: [])
+    monkeypatch.setattr("src.evolution.insert_run", lambda db, document: None)
+    monkeypatch.setattr("src.evolution.record_metrics", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.evolution.upsert_genome", lambda db, genome: None)
+    monkeypatch.setattr(
+        "src.evolution.ledger_check",
+        lambda db, edit_hash: edit_hash in ledger_hashes,
+    )
+    monkeypatch.setattr(
+        "src.evolution.ledger_add",
+        lambda db, edit_hash, note: ledger_hashes.add(edit_hash),
+    )
+
+    next_population = run_generation(
+        0,
+        population,
+        [101],
+        db=object(),
+        population_size=10,
+        elite_ratio=0.3,
+        mutation_rate=0.0,
+        max_steps=1,
+    )
+
+    children = [genome for genome in next_population if len(genome.parents) == 2]
+    elites = [genome for genome in next_population if len(genome.parents) == 1]
+    assert len(children) == 7
+    assert len(elites) == 3
+    assert {elite.parents[0] for elite in elites} == set(original_ids[-3:])
+    assert crossover_calls == 7
+    assert mutation_calls == 0
+    assert all("Rank-weighted selection" in child.selection_note for child in children)
+
+
+def test_duplicate_unmutated_crossover_forces_mutation_recovery(monkeypatch) -> None:
+    population = seed_population(2, experiment_id="forced-mutation")
+    original_ids = [genome.id for genome in population]
+    duplicate = GenomeConfig(rules=["duplicate crossover"])
+    mutation_calls = 0
+
+    def fake_evaluate(genome, seeds, **kwargs):
+        score = float(original_ids.index(genome.id))
+        return Fitness(score=score), [
+            EpisodeTrace(
+                genome_id=genome.id,
+                seed=seeds[0],
+                score=score,
+                achievements={},
+                steps=1,
+            )
+        ]
+
+    def fake_mutate(config, failure_traces, tried_edits=None):
+        nonlocal mutation_calls
+        mutation_calls += 1
+        return GenomeConfig(rules=["recovered mutation"]), "recovered duplicate"
+
+    monkeypatch.setattr("src.evolution.evaluate_genome", fake_evaluate)
+    monkeypatch.setattr(
+        "src.evolution.llm_crossover", lambda parent_a, parent_b: (duplicate, "crossed")
+    )
+    monkeypatch.setattr("src.evolution.llm_mutate", fake_mutate)
+    monkeypatch.setattr("src.evolution.get_failure_traces", lambda db, genome_id: [])
+    monkeypatch.setattr("src.evolution.insert_run", lambda db, document: None)
+    monkeypatch.setattr("src.evolution.record_metrics", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.evolution.upsert_genome", lambda db, genome: None)
+    monkeypatch.setattr(
+        "src.evolution.ledger_check",
+        lambda db, edit_hash: edit_hash == duplicate.content_hash(),
+    )
+    monkeypatch.setattr("src.evolution.ledger_add", lambda *args: None)
+
+    next_population = run_generation(
+        0,
+        population,
+        [101],
+        db=object(),
+        population_size=2,
+        elite_ratio=0.5,
+        mutation_rate=0.0,
+        max_steps=1,
+    )
+
+    child = next(genome for genome in next_population if len(genome.parents) == 2)
+    assert mutation_calls == 1
+    assert child.genome.rules == ["recovered mutation"]
+    assert "forced" in child.mutation_note.lower()
 
 
 def test_concurrent_population_evaluation_preserves_population_order(

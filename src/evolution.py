@@ -6,6 +6,7 @@ import random
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Literal
 
 import numpy as np
@@ -17,7 +18,6 @@ from src.config import settings
 from src.db import (
     ensure_indexes,
     get_all_genomes,
-    get_archive,
     get_db,
     get_failure_traces,
     get_metrics,
@@ -427,55 +427,76 @@ def select_and_archive(
     return survivors, culled
 
 
+def calculate_elite_count(population_size: int, elite_ratio: float) -> int:
+    """Convert an elite ratio to a bounded count with room for offspring."""
+    if population_size < 2:
+        raise ValueError("population_size must be at least 2")
+    if not 0 < elite_ratio < 1:
+        raise ValueError("elite_ratio must be between 0 and 1")
+    rounded = int(population_size * elite_ratio + 0.5)
+    return min(population_size - 1, max(1, rounded))
+
+
 # ── Pairing ──
+
+
+def rank_selection_weights(population: list[Genome]) -> dict[str, float]:
+    """Assign equal positive weights to score ties and higher weights to better ranks."""
+    score_ranks = {
+        score: float(rank)
+        for rank, score in enumerate(
+            sorted({genome.fitness.score for genome in population}), start=1
+        )
+    }
+    return {genome.id: score_ranks[genome.fitness.score] for genome in population}
 
 
 def weighted_pairs(
     parents: list[Genome],
-    archive: list[Genome],
     n_children: int,
-    archive_ratio: float = 0.1,
+    *,
+    rng: random.Random,
 ) -> list[tuple[Genome, Genome]]:
-    """Select parent pairs weighted by fitness."""
-    pairs = []
-    weights = np.array([max(g.fitness.score, 0.01) for g in parents])
-    weights = weights / weights.sum()
-
+    """Select distinct parent pairs from the full population using rank roulette."""
+    if len(parents) < 2:
+        raise ValueError("At least two parents are required")
+    by_id = rank_selection_weights(parents)
+    weights = [by_id[parent.id] for parent in parents]
+    pairs: list[tuple[Genome, Genome]] = []
     for _ in range(n_children):
-        if archive and random.random() < archive_ratio:
-            a = random.choices(parents, weights=weights, k=1)[0]
-            b = random.choice(archive)
-        else:
-            chosen = random.choices(parents, weights=weights, k=2)
-            a, b = chosen[0], chosen[1]
-            if a.id == b.id and len(parents) > 1:
-                others = [p for p in parents if p.id != a.id]
-                b = random.choice(others)
-        pairs.append((a, b))
-
+        parent_a = rng.choices(parents, weights=weights, k=1)[0]
+        alternatives = [parent for parent in parents if parent.id != parent_a.id]
+        alternative_weights = [by_id[parent.id] for parent in alternatives]
+        parent_b = rng.choices(alternatives, weights=alternative_weights, k=1)[0]
+        if parent_b.fitness.score > parent_a.fitness.score:
+            parent_a, parent_b = parent_b, parent_a
+        pairs.append((parent_a, parent_b))
     return pairs
 
 
 def _novelty_fallback(
-    db, config: GenomeConfig, mutation_note: str
+    db,
+    config: GenomeConfig,
+    mutation_note: str,
+    reserved_hashes: set[str] | None = None,
 ) -> tuple[GenomeConfig, str]:
     """Create a bounded deterministic variant when LLM mutation keeps converging."""
+    reserved = reserved_hashes or set()
     initial_history = config.context_budget.history_steps
     for offset in range(1, 201):
         candidate = config.model_copy(deep=True)
         candidate.context_budget.history_steps = (initial_history + offset) % 201
         edit_hash = candidate.content_hash()
-        if not ledger_check(db, edit_hash):
+        if edit_hash not in reserved and not ledger_check(db, edit_hash):
             note = (
                 f"{mutation_note} Novelty fallback adjusted context history from "
                 f"{initial_history} to {candidate.context_budget.history_steps} after "
-                "three duplicate LLM mutations."
+                "bounded mutation attempts."
             )
             ledger_add(db, edit_hash, note)
             return candidate, note
-    return (
-        config,
-        f"{mutation_note} Duplicate accepted because all context budgets were exhausted.",
+    raise RuntimeError(
+        "Could not produce a unique genome after exhausting all context budgets"
     )
 
 
@@ -490,6 +511,8 @@ def run_generation(
     *,
     population_size: int | None = None,
     n_survivors: int | None = None,
+    elite_ratio: float = 0.3,
+    mutation_rate: float = 0.4,
     max_steps: int | None = None,
     max_mutation_attempts: int = 3,
     reuse_completed: bool = False,
@@ -504,13 +527,21 @@ def run_generation(
     target_size = (
         population_size if population_size is not None else settings.population_size
     )
-    survivor_count = n_survivors if n_survivors is not None else settings.survivors
+    survivor_count = (
+        n_survivors
+        if n_survivors is not None
+        else calculate_elite_count(target_size, elite_ratio)
+    )
     if len(population) != target_size:
         raise ValueError(
             f"Expected population size {target_size}, received {len(population)}"
         )
     if not 1 <= survivor_count < target_size:
         raise ValueError("survivors must be between 1 and population_size - 1")
+    if not 0 < elite_ratio < 1:
+        raise ValueError("elite_ratio must be between 0 and 1")
+    if not 0 <= mutation_rate <= 1:
+        raise ValueError("mutation_rate must be between 0 and 1")
     if not seeds:
         raise ValueError("At least one shared training seed is required")
 
@@ -572,9 +603,15 @@ def run_generation(
 
     # 3. Breed children
     console.print("\n[bold]Phase 3: Crossover + Mutate[/bold]")
-    archive = get_archive(db, arm=population[0].arm if population else "full")
     n_children = target_size - survivor_count
-    pairs = weighted_pairs(survivors, archive, n_children)
+    experiment_id = population[0].arm if population else "full"
+    selection_seed = int.from_bytes(
+        sha256(f"{experiment_id}:{gen}".encode()).digest()[:8], "big"
+    )
+    rng = random.Random(selection_seed)
+    pairs = weighted_pairs(population, n_children, rng=rng)
+    selection_weights = rank_selection_weights(population)
+    known_hashes = {genome.genome.content_hash() for genome in population}
 
     children: list[Genome] = []
     for child_idx, (parent_a, parent_b) in enumerate(pairs):
@@ -584,30 +621,58 @@ def run_generation(
             parent_a.genome, parent_b.genome
         )
         child_config = crossover_config.model_copy(deep=True)
+        crossover_hash = child_config.content_hash()
+        duplicate_crossover = crossover_hash in known_hashes or ledger_check(
+            db, crossover_hash
+        )
+        mutation_sampled = rng.random() < mutation_rate
 
-        # Mutate based on failure traces
-        traces_a = get_failure_traces(db, parent_a.id)
-        traces_b = get_failure_traces(db, parent_b.id)
-        failure_traces = traces_a + traces_b
-
-        tried_edits: list[str] = []
-        for attempt in range(1, max_mutation_attempts + 1):
-            child_config, mutation_note = llm_mutate(
-                child_config, failure_traces, tried_edits=tried_edits
+        if mutation_sampled or duplicate_crossover:
+            # Mutate only sampled or duplicate children using both parents' failures.
+            traces_a = get_failure_traces(db, parent_a.id)
+            traces_b = get_failure_traces(db, parent_b.id)
+            failure_traces = traces_a + traces_b
+            tried_edits: list[str] = []
+            forced_prefix = (
+                "Forced mutation after duplicate crossover. "
+                if duplicate_crossover and not mutation_sampled
+                else ""
             )
-            edit_hash = child_config.content_hash()
-            if not ledger_check(db, edit_hash):
-                ledger_add(db, edit_hash, mutation_note)
-                break
-            tried_edits.append(mutation_note)
-            console.print(
-                f"[yellow]duplicate mutation {attempt}/{max_mutation_attempts}[/yellow]"
-            )
+            mutation_note = "mutation failed — kept crossover configuration"
+            for attempt in range(1, max_mutation_attempts + 1):
+                child_config, mutation_note = llm_mutate(
+                    child_config, failure_traces, tried_edits=tried_edits
+                )
+                if mutation_note.startswith("mutation failed"):
+                    tried_edits.append(mutation_note)
+                    console.print(
+                        f"[yellow]invalid mutation "
+                        f"{attempt}/{max_mutation_attempts}[/yellow]"
+                    )
+                    continue
+                edit_hash = child_config.content_hash()
+                if edit_hash not in known_hashes and not ledger_check(db, edit_hash):
+                    mutation_note = forced_prefix + mutation_note
+                    ledger_add(db, edit_hash, mutation_note)
+                    break
+                tried_edits.append(mutation_note)
+                console.print(
+                    f"[yellow]duplicate mutation "
+                    f"{attempt}/{max_mutation_attempts}[/yellow]"
+                )
+            else:
+                child_config, mutation_note = _novelty_fallback(
+                    db,
+                    child_config,
+                    forced_prefix + mutation_note,
+                    reserved_hashes=known_hashes,
+                )
+                console.print("[yellow]using deterministic novelty fallback[/yellow]")
         else:
-            child_config, mutation_note = _novelty_fallback(
-                db, child_config, mutation_note
-            )
-            console.print("[yellow]using deterministic novelty fallback[/yellow]")
+            mutation_note = "Mutation not sampled; retained crossover configuration."
+            ledger_add(db, crossover_hash, mutation_note)
+
+        known_hashes.add(child_config.content_hash())
 
         child = Genome(
             id=make_id(gen + 1, child_idx, parent_a.arm),
@@ -615,9 +680,11 @@ def run_generation(
             parents=[parent_a.id, parent_b.id],
             genome=child_config,
             selection_note=(
-                f"Fitness-weighted selection chose {parent_a.id} "
-                f"(score={parent_a.fitness.score:.3f}) and {parent_b.id} "
-                f"(score={parent_b.fitness.score:.3f})."
+                f"Rank-weighted selection chose {parent_a.id} "
+                f"(score={parent_a.fitness.score:.3f}, "
+                f"weight={selection_weights[parent_a.id]:.1f}) and {parent_b.id} "
+                f"(score={parent_b.fitness.score:.3f}, "
+                f"weight={selection_weights[parent_b.id]:.1f})."
             ),
             crossover_note=crossover_note,
             crossover_config=crossover_config,
@@ -628,7 +695,7 @@ def run_generation(
         upsert_genome(db, child)
         console.print(f"→ {child.id}: {mutation_note}")
 
-    # Preserve evaluated survivors and carry cloned descendants into the next generation.
+    # Preserve evaluated elites and carry cloned descendants into the next generation.
     carried: list[Genome] = []
     for i, survivor in enumerate(survivors):
         survivor.status = "archived"
@@ -640,10 +707,10 @@ def run_generation(
             genome=survivor.genome.model_copy(deep=True),
             fitness=survivor.fitness.model_copy(deep=True),
             selection_note=(
-                f"Carried forward as a top-{survivor_count} survivor with "
+                f"Carried forward unchanged as a top-{survivor_count} elite with "
                 f"score={survivor.fitness.score:.3f}."
             ),
-            mutation_note=f"Carried forward from {survivor.id}",
+            mutation_note=f"Elite copy carried forward from {survivor.id}",
             arm=survivor.arm,
         )
         upsert_genome(db, promoted)
@@ -703,6 +770,8 @@ def run_evolution(
     experiment_id: str = "default",
     population_size: int | None = None,
     survivors: int | None = None,
+    elite_ratio: float | None = None,
+    mutation_rate: float | None = None,
     seeds_per_generation: int | None = None,
     max_steps: int | None = None,
     resume: bool = False,
@@ -712,18 +781,23 @@ def run_evolution(
     max_skill_steps: int = 5,
 ) -> Genome:
     """Run new or resumed evolutionary transitions and return the latest champion."""
-    db = get_db()
-    if db is None:
-        raise RuntimeError("Atlas is required for evolution runs")
-    ensure_indexes(db)
-
     max_gen = (
         max_generations if max_generations is not None else settings.max_generations
     )
     target_size = (
         population_size if population_size is not None else settings.population_size
     )
-    survivor_count = survivors if survivors is not None else settings.survivors
+    resolved_elite_ratio = (
+        elite_ratio if elite_ratio is not None else settings.elite_ratio
+    )
+    resolved_mutation_rate = (
+        mutation_rate if mutation_rate is not None else settings.mutation_rate
+    )
+    survivor_count = (
+        survivors
+        if survivors is not None
+        else calculate_elite_count(target_size, resolved_elite_ratio)
+    )
     seed_count = (
         seeds_per_generation
         if seeds_per_generation is not None
@@ -737,6 +811,10 @@ def run_evolution(
         raise ValueError("population_size must be at least 2")
     if not 1 <= survivor_count < target_size:
         raise ValueError("survivors must be between 1 and population_size - 1")
+    if not 0 < resolved_elite_ratio < 1:
+        raise ValueError("elite_ratio must be between 0 and 1")
+    if not 0 <= resolved_mutation_rate <= 1:
+        raise ValueError("mutation_rate must be between 0 and 1")
     if step_limit <= 0:
         raise ValueError("max_steps must be positive")
     if workers <= 0:
@@ -745,6 +823,10 @@ def run_evolution(
         raise ValueError("max_skill_steps must be between 1 and 5")
     if seed_count <= 0 or seed_count > len(all_train_seeds):
         raise ValueError("seeds_per_generation must fit within train_seeds")
+    db = get_db()
+    if db is None:
+        raise RuntimeError("Atlas is required for evolution runs")
+    ensure_indexes(db)
     existing_genomes = get_all_genomes(db, arm=experiment_id)
     if existing_genomes and not resume:
         raise ValueError(
@@ -793,6 +875,7 @@ def run_evolution(
     console.print(
         f"[bold green]Starting evolution at generation {start_generation}: "
         f"{max_gen} additional transition(s), pop={target_size}, "
+        f"elites={survivor_count}, mutation={resolved_mutation_rate:.0%}, "
         f"seeds={shared_seeds}, steps={step_limit}[/bold green]\n"
     )
 
@@ -804,6 +887,8 @@ def run_evolution(
             db,
             population_size=target_size,
             n_survivors=survivor_count,
+            elite_ratio=resolved_elite_ratio,
+            mutation_rate=resolved_mutation_rate,
             max_steps=step_limit,
             reuse_completed=resume and offset == 0,
             workers=workers,

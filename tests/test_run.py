@@ -4,7 +4,17 @@ from argparse import Namespace
 from pathlib import Path
 
 import run
+from src.config import Settings
 from src.genome import Genome
+
+
+def test_evolution_policy_defaults_to_thirty_percent_elites_and_forty_percent_mutation() -> (
+    None
+):
+    defaults = Settings(_env_file=None)
+
+    assert defaults.elite_ratio == 0.3
+    assert defaults.mutation_rate == 0.4
 
 
 def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
@@ -22,6 +32,8 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
         experiment_id="strong-seeds-200-v1",
         population=10,
         survivors=5,
+        elite_ratio=0.3,
+        mutation_rate=0.4,
         seeds_per_generation=1,
         max_steps=200,
         resume=False,
@@ -39,6 +51,8 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
     assert captured["controller"] == "skills"
     assert captured["workers"] == 3
     assert captured["max_skill_steps"] == 4
+    assert captured["elite_ratio"] == 0.3
+    assert captured["mutation_rate"] == 0.4
     output = capsys.readouterr().out
     assert "worst-case retry upper bound: 18,000 gameplay calls" in output
 

@@ -149,9 +149,11 @@ Respond with ONLY a JSON object:
         if match:
             data = json.loads(match.group())
             config = GenomeConfig(**data.get("config", data))
+            if config.content_hash() == genome.content_hash():
+                return genome, "mutation failed — no configuration change"
             note = data.get("mutation_note", "LLM mutation")
             return config, note
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         pass
 
-    return genome, "mutation failed — kept parent"
+    return genome, "mutation failed — kept crossover configuration"

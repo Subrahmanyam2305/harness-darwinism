@@ -18,16 +18,28 @@ console = Console()
 
 def cmd_evolve(args):
     """Run the full evolution loop."""
-    from src.evolution import run_evolution
+    from src.evolution import calculate_elite_count, run_evolution
 
     episode_count = args.population * args.seeds_per_generation * (args.generations + 1)
     decision_upper_bound = episode_count * args.max_steps
     retry_upper_bound = decision_upper_bound * 3
+    elite_count = (
+        args.survivors
+        if args.survivors is not None
+        else calculate_elite_count(args.population, args.elite_ratio)
+    )
+    children_per_generation = args.population - elite_count
+    crossover_calls = children_per_generation * args.generations
+    expected_mutation_calls = crossover_calls * args.mutation_rate
     console.print(
         "[bold]Experiment call estimate[/bold]\n"
         f"  controller: {args.controller}\n"
         f"  workers: {args.workers}\n"
         f"  episodes: {episode_count:,}\n"
+        f"  genetic policy: {elite_count} elites + "
+        f"{children_per_generation} crossover children per transition\n"
+        f"  expected meta-agent calls: {crossover_calls:,} crossover + "
+        f"~{expected_mutation_calls:.1f} mutation (before retries)\n"
         f"  decision upper bound: {decision_upper_bound:,} gameplay decisions\n"
         f"  worst-case retry upper bound: {retry_upper_bound:,} gameplay calls"
     )
@@ -43,6 +55,8 @@ def cmd_evolve(args):
         experiment_id=args.experiment_id,
         population_size=args.population,
         survivors=args.survivors,
+        elite_ratio=args.elite_ratio,
+        mutation_rate=args.mutation_rate,
         seeds_per_generation=args.seeds_per_generation,
         max_steps=args.max_steps,
         resume=args.resume,
@@ -278,8 +292,25 @@ def main():
         help="Evolutionary transitions to run (additional transitions with --resume)",
     )
     p_evolve.add_argument("--experiment-id", required=True)
-    p_evolve.add_argument("--population", type=int, default=4)
-    p_evolve.add_argument("--survivors", type=int, default=2)
+    p_evolve.add_argument("--population", type=int, default=10)
+    p_evolve.add_argument(
+        "--survivors",
+        type=int,
+        default=None,
+        help="Exact elite count; overrides --elite-ratio for compatibility",
+    )
+    p_evolve.add_argument(
+        "--elite-ratio",
+        type=float,
+        default=0.3,
+        help="Fraction copied unchanged into the next generation",
+    )
+    p_evolve.add_argument(
+        "--mutation-rate",
+        type=float,
+        default=0.4,
+        help="Probability that a crossover child receives semantic mutation",
+    )
     p_evolve.add_argument("--seeds-per-generation", type=int, default=1)
     p_evolve.add_argument(
         "--train-seeds",
