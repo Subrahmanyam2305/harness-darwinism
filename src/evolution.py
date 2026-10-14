@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import re
 from datetime import UTC, datetime
+from typing import Literal
 
 import numpy as np
 from rich.console import Console
@@ -57,9 +58,137 @@ STARTER_RULE_POOL = [
     "Build a furnace after collecting stone and wood.",
 ]
 
+SeedProfile = Literal["legacy", "strong-v2"]
 
-def seed_population(n: int = 10, *, experiment_id: str = "default") -> list[Genome]:
+STRONG_V2_RULE_POOL = [
+    (
+        "Immediately navigate to a visible tree, face it, and use do until "
+        "inventory contains at least 4 wood."
+    ),
+    (
+        "After collecting 4 wood, place one table and, without moving away, "
+        "craft a wood pickaxe and wood sword."
+    ),
+    (
+        "With a wood pickaxe, navigate to visible stone and mine it with do "
+        "until inventory contains at least 4 stone."
+    ),
+    (
+        "After collecting 4 stone, place one furnace and craft a stone pickaxe "
+        "when the required materials are available."
+    ),
+    "If food is 3 or lower, find a visible cow or plant, face it, and use do.",
+    "If drink is 3 or lower, find visible water, face it, and use do.",
+    "If energy is 2 or lower and no enemy is adjacent, sleep.",
+    "At night without a sword, prioritize safety and sleep instead of exploring.",
+    ("When a useful resource is adjacent, face it and use do before moving away."),
+    (
+        "If the same action twice produces no inventory or achievement change, "
+        "choose another direction and reassess the current goal."
+    ),
+    (
+        "After crafting a stone pickaxe, explore for visible coal and iron "
+        "deposits and mine them with do."
+    ),
+    (
+        "After the core tool achievements, pursue unfinished achievements such "
+        "as collecting a sapling, placing a plant, and placing stone."
+    ),
+    (
+        "Fight an adjacent zombie or skeleton with do only when carrying a sword "
+        "and survival vitals are safe."
+    ),
+]
+
+STRONG_V2_TEMPLATES = [
+    [
+        "Collect 4 wood before pursuing any other non-emergency goal.",
+        (
+            "Place one table, then remain beside it while crafting a wood pickaxe "
+            "and wood sword."
+        ),
+        "Mine at least 4 stone after obtaining the wood pickaxe.",
+        "Place one furnace, then explore for coal and iron with the stone pickaxe.",
+        "Use do only while facing the adjacent resource or creature you intend to use.",
+        "Interrupt resource progression whenever food, drink, or health becomes unsafe.",
+        (
+            "If two repeated actions make no progress, change direction and "
+            "reassess the current resource goal."
+        ),
+    ],
+    [
+        (
+            "Pursue unfinished achievements in this order: collect_wood, "
+            "place_table, make_wood_pickaxe, make_wood_sword, collect_drink, "
+            "collect_sapling, eat_cow, collect_stone, and place_furnace."
+        ),
+        "Use current inventory and unlocked achievements to select exactly one next goal.",
+        "Face an adjacent target before using do; do not spend do on empty tiles.",
+        "Keep food and drink above 3 and energy above 2 before exploring farther.",
+        "Craft immediately after placing a table so its location is not lost.",
+        (
+            "After the core sequence, diversify into place_plant, place_stone, "
+            "sleep and wake, combat, coal, and iron achievements."
+        ),
+        "Abandon an action after two attempts without an inventory or achievement change.",
+    ],
+    [
+        "First collect 4 wood, place a table, and craft a wood pickaxe and sword.",
+        "Then collect water and food before mining at least 4 stone.",
+        "Place a furnace and search the visible map for coal and iron deposits.",
+        "Treat health, food, or drink at 3 or lower as an emergency priority.",
+        "Fight only while carrying a sword; otherwise move away from enemies.",
+        "Sleep at night when no enemy is adjacent and energy is low.",
+        "Use a different movement direction when repeated actions make no progress.",
+    ],
+]
+
+
+def seed_population(
+    n: int = 10,
+    *,
+    experiment_id: str = "default",
+    seed_profile: SeedProfile = "legacy",
+) -> list[Genome]:
     """Create generation 0 with varied rule subsets."""
+    if seed_profile not in ("legacy", "strong-v2"):
+        raise ValueError(f"Unknown seed profile: {seed_profile}")
+
+    if seed_profile == "strong-v2":
+        population: list[Genome] = []
+        seen_rule_sets: set[tuple[str, ...]] = set()
+        for template in STRONG_V2_TEMPLATES[:n]:
+            rules = list(template)
+            seen_rule_sets.add(tuple(rules))
+            population.append(
+                Genome(
+                    id=make_id(0, len(population), experiment_id),
+                    generation=0,
+                    genome=GenomeConfig(rules=rules),
+                    selection_note="Initial seed profile: strong-v2.",
+                    arm=experiment_id,
+                )
+            )
+
+        rng = random.Random(42)
+        while len(population) < n:
+            rule_count = rng.randint(4, min(8, len(STRONG_V2_RULE_POOL)))
+            rules = rng.sample(STRONG_V2_RULE_POOL, rule_count)
+            rule_key = tuple(rules)
+            if rule_key in seen_rule_sets:
+                continue
+            seen_rule_sets.add(rule_key)
+            population.append(
+                Genome(
+                    id=make_id(0, len(population), experiment_id),
+                    generation=0,
+                    genome=GenomeConfig(rules=rules),
+                    selection_note="Initial seed profile: strong-v2.",
+                    arm=experiment_id,
+                )
+            )
+        return population
+
     population = []
     for i in range(n):
         k = random.randint(1, min(5, len(STARTER_RULE_POOL)))
@@ -123,9 +252,7 @@ def evaluate_genome(
                 recorder.fail("episode_exception")
             raise
         if recorder:
-            trace.artifact_path = str(
-                recorder.path.relative_to(settings.project_root)
-            )
+            trace.artifact_path = str(recorder.path.relative_to(settings.project_root))
             recorder.finish(trace)
         traces.append(trace)
         console.print(f"score={trace.score:.1f}, steps={trace.steps}")
@@ -479,6 +606,7 @@ def run_evolution(
     seeds_per_generation: int | None = None,
     max_steps: int | None = None,
     resume: bool = False,
+    seed_profile: SeedProfile = "legacy",
 ) -> Genome:
     """Run new or resumed evolutionary transitions and return the latest champion."""
     db = get_db()
@@ -530,9 +658,7 @@ def run_evolution(
                 f"Stored generation {start_generation} has {len(population)} genomes, "
                 f"expected {target_size}"
             )
-        stored_seeds = _resume_seeds(
-            db, population, start_generation, experiment_id
-        )
+        stored_seeds = _resume_seeds(db, population, start_generation, experiment_id)
         if len(stored_seeds) != seed_count:
             raise ValueError(
                 f"Stored run evidence has seeds {sorted(stored_seeds)}, "
@@ -542,7 +668,11 @@ def run_evolution(
     else:
         start_generation = 0
         shared_seeds = random.sample(all_train_seeds, seed_count)
-        population = seed_population(target_size, experiment_id=experiment_id)
+        population = seed_population(
+            target_size,
+            experiment_id=experiment_id,
+            seed_profile=seed_profile,
+        )
         for g in population:
             upsert_genome(db, g)
 
@@ -552,9 +682,7 @@ def run_evolution(
         f"seeds={shared_seeds}, steps={step_limit}[/bold green]\n"
     )
 
-    for offset, gen in enumerate(
-        range(start_generation, start_generation + max_gen)
-    ):
+    for offset, gen in enumerate(range(start_generation, start_generation + max_gen)):
         population = run_generation(
             gen,
             population,

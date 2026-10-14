@@ -21,12 +21,14 @@ def cmd_evolve(args):
 
     champion = run_evolution(
         max_generations=args.generations,
+        train_seeds=args.train_seeds,
         experiment_id=args.experiment_id,
         population_size=args.population,
         survivors=args.survivors,
         seeds_per_generation=args.seeds_per_generation,
         max_steps=args.max_steps,
         resume=args.resume,
+        seed_profile=args.seed_profile,
     )
     console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
@@ -193,6 +195,18 @@ def main():
     p_evolve.add_argument("--population", type=int, default=4)
     p_evolve.add_argument("--survivors", type=int, default=2)
     p_evolve.add_argument("--seeds-per-generation", type=int, default=1)
+    p_evolve.add_argument(
+        "--train-seeds",
+        type=int,
+        nargs="+",
+        help="Explicit training-seed pool; sampled identically for every candidate",
+    )
+    p_evolve.add_argument(
+        "--seed-profile",
+        choices=["legacy", "strong-v2"],
+        default="legacy",
+        help="Generation-zero harness initialization profile",
+    )
     p_evolve.add_argument("--max-steps", type=int, default=100)
     p_evolve.add_argument(
         "--resume",

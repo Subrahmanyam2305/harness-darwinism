@@ -16,6 +16,33 @@ from src.evolution import (
 from src.genome import Fitness, Genome, GenomeConfig
 
 
+def test_strong_v2_seed_population_is_deterministic_and_scoped() -> None:
+    first = seed_population(
+        10,
+        experiment_id="strong-seeds-200-v1",
+        seed_profile="strong-v2",
+    )
+    second = seed_population(
+        10,
+        experiment_id="strong-seeds-200-v1",
+        seed_profile="strong-v2",
+    )
+
+    assert [genome.genome for genome in first] == [genome.genome for genome in second]
+    assert [genome.id for genome in first] == [
+        f"strong-seeds-200-v1_g0_{index:02d}" for index in range(10)
+    ]
+    assert all(genome.arm == "strong-seeds-200-v1" for genome in first)
+    assert all(genome.genome.context_budget.history_steps == 10 for genome in first)
+    assert all(
+        genome.selection_note == "Initial seed profile: strong-v2." for genome in first
+    )
+    assert all(
+        "go underground" not in rule for genome in first for rule in genome.genome.rules
+    )
+    assert len({tuple(genome.genome.rules) for genome in first}) == 10
+
+
 def test_agent_error_becomes_zero_fitness_and_keeps_trace(monkeypatch) -> None:
     genome = Genome(id="failed-candidate")
     failed_trace = EpisodeTrace(
@@ -32,9 +59,7 @@ def test_agent_error_becomes_zero_fitness_and_keeps_trace(monkeypatch) -> None:
         "src.evolution.play_episode", lambda *args, **kwargs: failed_trace
     )
 
-    fitness, traces = evaluate_genome(
-        genome, [127], max_steps=100, record_frames=False
-    )
+    fitness, traces = evaluate_genome(genome, [127], max_steps=100, record_frames=False)
 
     assert fitness.score == 0.0
     assert fitness.mean_steps == 42
