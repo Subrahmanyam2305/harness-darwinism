@@ -117,6 +117,9 @@ def _serialize_run(run: dict) -> dict:
     compact_history = [
         {
             "step": item.get("step"),
+            "decision_id": item.get("decision_id"),
+            "skill": item.get("skill"),
+            "skill_status": item.get("skill_status"),
             "action": item.get("action"),
             "reward": item.get("reward", 0),
             "obs_snippet": item.get("obs_snippet", item.get("observation_after", ""))[
@@ -127,9 +130,36 @@ def _serialize_run(run: dict) -> dict:
         for item in history
         if isinstance(item, dict)
     ]
+    steps = trace.get("steps", document.get("steps"))
+    model_calls = trace.get("model_calls", document.get("model_calls"))
+    input_tokens = trace.get("input_tokens", document.get("input_tokens"))
+    output_tokens = trace.get("output_tokens", document.get("output_tokens"))
+    steps_per_call = (
+        steps / model_calls
+        if isinstance(steps, (int, float))
+        and isinstance(model_calls, (int, float))
+        and model_calls > 0
+        else None
+    )
+    tokens_per_step = (
+        (input_tokens + output_tokens) / steps
+        if isinstance(steps, (int, float))
+        and steps > 0
+        and isinstance(input_tokens, (int, float))
+        and isinstance(output_tokens, (int, float))
+        else None
+    )
     document.update(
         {
             "id": run_id,
+            "controller": trace.get(
+                "controller", document.get("controller", "primitive")
+            ),
+            "decisions": trace.get("decisions", document.get("decisions", [])),
+            "model_calls": model_calls,
+            "environment_steps": steps,
+            "steps_per_model_call": steps_per_call,
+            "tokens_per_environment_step": tokens_per_step,
             "history": compact_history,
             "history_len": len(compact_history),
             "termination_reason": trace.get(

@@ -368,6 +368,35 @@ main {
   margin-bottom: 16px;
 }
 
+.efficiency-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.efficiency-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.efficiency-strip span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.efficiency-strip strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .replay-controls {
   display: flex;
   gap: 8px;
@@ -446,6 +475,26 @@ main {
   flex-direction: column;
   gap: 10px;
 }
+
+.replay-decision {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.replay-decision span,
+.replay-decision em {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--accent);
+  font-style: normal;
+}
+
+.replay-decision code { color: var(--text-tertiary); }
 
 .replay-thought {
   background: rgba(10, 132, 255, 0.08);

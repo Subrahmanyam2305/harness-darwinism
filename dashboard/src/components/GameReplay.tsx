@@ -1,36 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface Step {
-  step: number;
-  action: string;
-  reward: number;
-  obs_snippet: string;
-  thought?: string;
-}
-
-interface Run {
-  id?: string;
-  genome_id: string;
-  seed: number;
-  score: number;
-  steps: number;
-  failure_summary: string;
-  history_len: number;
-  gif_path?: string;
-  replay_url?: string;
-  frame_url?: string;
-  history?: Step[];
-}
+import type { ReplayStep, RunSummary } from "../api";
 
 interface Props {
-  runs: Run[];
+  runs: RunSummary[];
   genomeId: string;
 }
 
 const API_BASE = "http://localhost:8001";
 
-function pickDefaultRun(runs: Run[]): Run | null {
+function pickDefaultRun(runs: RunSummary[]): RunSummary | null {
   if (!runs.length) return null;
   // Prefer a run that has a GIF, then highest score
   const withGif = runs.filter((r) => r.replay_url || r.gif_path);
@@ -39,10 +18,10 @@ function pickDefaultRun(runs: Run[]): Run | null {
 }
 
 export function GameReplay({ runs, genomeId }: Props) {
-  const [selectedRun, setSelectedRun] = useState<Run | null>(
+  const [selectedRun, setSelectedRun] = useState<RunSummary | null>(
     pickDefaultRun(runs)
   );
-  const [steps, setSteps] = useState<Step[]>([]);
+  const [steps, setSteps] = useState<ReplayStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -65,7 +44,7 @@ export function GameReplay({ runs, genomeId }: Props) {
     fetch(`${API_BASE}/api/genomes/${selectedRun.genome_id}`)
       .then((r) => r.json())
       .then((data) => {
-        const run = data.runs?.find((candidate: Run) =>
+        const run = data.runs?.find((candidate: RunSummary) =>
           selectedRun.id ? candidate.id === selectedRun.id : candidate.seed === selectedRun.seed
         );
         if (run?.history) {
@@ -131,6 +110,17 @@ export function GameReplay({ runs, genomeId }: Props) {
           ))}
         </div>
       </div>
+
+      {selectedRun && (
+        <div className="efficiency-strip">
+          <div><span>Controller</span><strong>{selectedRun.controller ?? "primitive"}</strong></div>
+          <div><span>Model calls</span><strong>{selectedRun.model_calls ?? "Unavailable"}</strong></div>
+          <div><span>Environment steps</span><strong>{selectedRun.environment_steps ?? selectedRun.steps}</strong></div>
+          <div><span>Steps / call</span><strong>{selectedRun.steps_per_model_call?.toFixed(2) ?? "Unavailable"}</strong></div>
+          <div><span>Tokens / step</span><strong>{selectedRun.tokens_per_environment_step?.toFixed(1) ?? "Unavailable"}</strong></div>
+          <div><span>Latency</span><strong>{selectedRun.latency_seconds != null ? `${selectedRun.latency_seconds.toFixed(1)}s` : "Unavailable"}</strong></div>
+        </div>
+      )}
 
       {/* Video + Text side by side */}
       <div style={{ display: "grid", gridTemplateColumns: gifUrl ? "256px 1fr" : "1fr", gap: 20 }}>
@@ -223,6 +213,13 @@ export function GameReplay({ runs, genomeId }: Props) {
               >
                 <div className="replay-observation">{step.obs_snippet}</div>
                 <div className="replay-action">
+                  {step.decision_id && (
+                    <div className="replay-decision">
+                      <span>{step.skill ?? "skill"}</span>
+                      <code>{step.decision_id}</code>
+                      {step.skill_status && <em>{step.skill_status}</em>}
+                    </div>
+                  )}
                   <div className="replay-action-badge">→ {step.action}</div>
                   <div className={`replay-reward ${step.reward > 0 ? "positive" : ""}`}>
                     {step.reward > 0 ? `🎉 Reward: +${step.reward}` : `Reward: ${step.reward}`}

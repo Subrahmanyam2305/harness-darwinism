@@ -50,6 +50,45 @@ export interface TreeData {
   edges: { source: string; target: string }[];
 }
 
+export interface ReplayStep {
+  step: number;
+  decision_id?: string | null;
+  skill?: string | null;
+  skill_status?: string | null;
+  action: string;
+  reward: number;
+  obs_snippet: string;
+}
+
+export interface SkillDecision {
+  decision_id: string;
+  skill: { name: string; target?: string | null };
+  actions: string[];
+  status: string;
+  reason?: string;
+}
+
+export interface RunSummary {
+  id?: string;
+  genome_id: string;
+  seed: number;
+  score: number;
+  steps: number;
+  environment_steps?: number | null;
+  controller?: "primitive" | "skills";
+  model_calls?: number | null;
+  steps_per_model_call?: number | null;
+  tokens_per_environment_step?: number | null;
+  latency_seconds?: number | null;
+  decisions?: SkillDecision[];
+  failure_summary: string;
+  history_len: number;
+  gif_path?: string;
+  replay_url?: string;
+  frame_url?: string;
+  history?: ReplayStep[];
+}
+
 export async function fetchMetrics(arm = "full"): Promise<MetricPoint[]> {
   const res = await fetch(`${API_BASE}/api/metrics?arm=${arm}`);
   return res.json();
@@ -77,7 +116,7 @@ export async function fetchAchievements(
 
 export async function fetchGenomeDetail(
   id: string
-): Promise<{ genome: GenomeSummary; runs: any[] }> {
+): Promise<{ genome: GenomeSummary; runs: RunSummary[] }> {
   const res = await fetch(`${API_BASE}/api/genomes/${id}`);
   return res.json();
 }
