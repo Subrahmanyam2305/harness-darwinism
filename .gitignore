@@ -10,3 +10,4 @@ dist/
 data/runs/
 .vscode/
 data/replays/*.gif
+.DS_Store
