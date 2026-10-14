@@ -21,6 +21,8 @@ class ProgressPhase(StrEnum):
 class KnownLocation(BaseModel):
     """A bounded, explicitly staleable relative landmark estimate."""
 
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     direction: str
     estimated_distance: int = Field(ge=0, le=64)
     last_seen_step: int = Field(ge=0)

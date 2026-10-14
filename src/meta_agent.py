@@ -3,11 +3,51 @@
 from __future__ import annotations
 
 import json
-import re
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.config import settings
 from src.genome import GenomeConfig
 from src.llm import chat
+
+
+class _CrossoverGenomeConfig(GenomeConfig):
+    """Genome bounds accepted from a crossover model response."""
+
+    rules: list[str] = Field(min_length=3, max_length=8)
+
+
+class _MutationGenomeConfig(GenomeConfig):
+    """Genome bounds accepted from a mutation model response."""
+
+    rules: list[str] = Field(min_length=2, max_length=10)
+
+
+class _CrossoverOutput(BaseModel):
+    """Complete structured response required from crossover inference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    config: _CrossoverGenomeConfig
+    crossover_note: str = Field(min_length=1, max_length=500)
+
+
+class _MutationOutput(BaseModel):
+    """Complete structured response required from mutation inference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    config: _MutationGenomeConfig
+    mutation_note: str = Field(min_length=1, max_length=500)
+
+
+def _validation_summary(error: ValidationError) -> str:
+    """Return a compact correction reason without echoing model output."""
+    first = error.errors(include_url=False)[0]
+    if first["type"] == "json_invalid":
+        return "no JSON object found"
+    location = ".".join(str(item) for item in first["loc"]) or "response"
+    return f"invalid schema at {location} ({first['type']})"
 
 
 def llm_crossover(
@@ -17,19 +57,16 @@ def llm_crossover(
     if max_attempts < 1:
         raise ValueError("max_attempts must be at least 1")
 
+    output_schema = json.dumps(
+        _CrossoverOutput.model_json_schema(), separators=(",", ":")
+    )
     base_prompt = f"""You are an evolution operator. Merge the best traits of two parent agent configurations into one child.
 
 ## Parent A
-System prompt: {parent_a.system_prompt}
-Rules: {json.dumps(parent_a.rules)}
-Memory policy: {parent_a.memory_policy.model_dump()}
-Context budget: {parent_a.context_budget.model_dump()}
+{parent_a.model_dump_json()}
 
 ## Parent B
-System prompt: {parent_b.system_prompt}
-Rules: {json.dumps(parent_b.rules)}
-Memory policy: {parent_b.memory_policy.model_dump()}
-Context budget: {parent_b.context_budget.model_dump()}
+{parent_b.model_dump_json()}
 
 ## Task
 Produce a CHILD configuration that combines the strongest elements of both parents.
@@ -38,16 +75,8 @@ Produce a CHILD configuration that combines the strongest elements of both paren
 - Keep the total rule count between 3 and 8.
 - You may slightly rephrase rules for clarity but don't invent new strategies.
 
-Respond with ONLY a JSON object:
-{{
-  "config": {{
-    "system_prompt": "...",
-    "rules": ["...", "..."],
-    "memory_policy": {{"type": "notes"|"summary"|"none", "max_items": N}},
-    "context_budget": {{"history_steps": N}}
-  }},
-  "crossover_note": "one sentence explaining which traits you kept from each parent and why"
-}}"""
+Respond with ONLY one JSON object matching this JSON Schema:
+{output_schema}"""
 
     failures: list[str] = []
     for attempt in range(1, max_attempts + 1):
@@ -64,21 +93,14 @@ Respond with ONLY a JSON object:
             max_tokens=600,
             temperature=0.7,
         )
-        match = re.search(r"\{[\s\S]+\}", resp)
-        if not match:
-            failures.append("no JSON object found")
-            continue
         try:
-            data = json.loads(match.group())
-            config = GenomeConfig(**data.get("config", data))
-        except json.JSONDecodeError as error:
-            failures.append(f"malformed JSON ({error.msg})")
-            continue
-        except (KeyError, TypeError, ValueError) as error:
-            failures.append(f"invalid genome schema ({error})")
+            output = _CrossoverOutput.model_validate_json(resp)
+        except ValidationError as error:
+            failures.append(_validation_summary(error))
             continue
 
-        note = data.get("crossover_note", "Combined both parent configurations")
+        config = GenomeConfig.model_validate(output.config.model_dump())
+        note = output.crossover_note
         if attempt > 1:
             note = f"{note} Crossover succeeded on attempt {attempt}."
         return config, note
@@ -106,13 +128,13 @@ def llm_mutate(
             f"- {e}" for e in tried_edits[-10:]
         )
 
+    output_schema = json.dumps(
+        _MutationOutput.model_json_schema(), separators=(",", ":")
+    )
     prompt = f"""You are an evolution operator. Improve an agent's configuration based on its failure traces.
 
 ## Current Configuration
-System prompt: {genome.system_prompt}
-Rules: {json.dumps(genome.rules)}
-Memory policy: {genome.memory_policy.model_dump()}
-Context budget: {genome.context_budget.model_dump()}
+{genome.model_dump_json()}
 
 ## Failure Traces
 {traces_text}
@@ -126,16 +148,8 @@ Analyze the failures and make ONE targeted improvement:
 - Keep total rules between 2 and 10.
 - Be specific: "Collect wood before anything else" is better than "Be efficient".
 
-Respond with ONLY a JSON object:
-{{
-  "config": {{
-    "system_prompt": "...",
-    "rules": ["...", "..."],
-    "memory_policy": {{"type": "notes"|"summary"|"none", "max_items": N}},
-    "context_budget": {{"history_steps": N}}
-  }},
-  "mutation_note": "one-line description of what you changed and why"
-}}"""
+Respond with ONLY one JSON object matching this JSON Schema:
+{output_schema}"""
 
     resp = chat(
         messages=[{"role": "user", "content": prompt}],
@@ -145,15 +159,11 @@ Respond with ONLY a JSON object:
     )
 
     try:
-        match = re.search(r"\{[\s\S]+\}", resp)
-        if match:
-            data = json.loads(match.group())
-            config = GenomeConfig(**data.get("config", data))
-            if config.content_hash() == genome.content_hash():
-                return genome, "mutation failed — no configuration change"
-            note = data.get("mutation_note", "LLM mutation")
-            return config, note
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        pass
+        output = _MutationOutput.model_validate_json(resp)
+    except ValidationError:
+        return genome, "mutation failed — kept crossover configuration"
 
-    return genome, "mutation failed — kept crossover configuration"
+    config = GenomeConfig.model_validate(output.config.model_dump())
+    if config.content_hash() == genome.content_hash():
+        return genome, "mutation failed — no configuration change"
+    return config, output.mutation_note

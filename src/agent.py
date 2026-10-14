@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from random import uniform
@@ -431,7 +430,7 @@ def _play_skill_episode(
         cost_usd=_sum_if_complete(attempts, "cost_usd"),
         latency_seconds=float(sum(attempt["latency_seconds"] for attempt in attempts)),
         error=terminal_error,
-        harness=json.loads(config.model_dump_json()),
+        harness=config.model_dump(mode="json"),
         max_steps=max_steps,
         max_skill_steps=max_skill_steps,
         controller="skills",
@@ -637,7 +636,7 @@ def play_episode(
         cost_usd=_sum_if_complete(attempts, "cost_usd"),
         latency_seconds=float(sum(attempt["latency_seconds"] for attempt in attempts)),
         error=terminal_error,
-        harness=json.loads(config.model_dump_json()),
+        harness=config.model_dump(mode="json"),
         max_steps=max_steps,
         controller="primitive",
         model_calls=len(attempts),

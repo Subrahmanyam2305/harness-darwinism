@@ -35,6 +35,68 @@ def test_crossover_retries_invalid_response_and_records_recovery(monkeypatch) ->
     assert "no JSON object found" in prompts[1]
 
 
+def test_crossover_rejects_prose_wrapped_json(monkeypatch) -> None:
+    valid = json.dumps(
+        {
+            "config": GenomeConfig(
+                rules=["Keep food available", "Collect wood", "Craft tools"]
+            ).model_dump(),
+            "crossover_note": "Combined survival and crafting rules.",
+        }
+    )
+    responses = iter([f"Here is the result:\n{valid}", valid])
+    calls = 0
+
+    def fake_chat(**kwargs):
+        nonlocal calls
+        calls += 1
+        return next(responses)
+
+    monkeypatch.setattr("src.meta_agent.chat", fake_chat)
+
+    child, note = llm_crossover(GenomeConfig(), GenomeConfig())
+
+    assert calls == 2
+    assert child.rules == ["Keep food available", "Collect wood", "Craft tools"]
+    assert "attempt 2" in note
+
+
+def test_crossover_rejects_unknown_output_fields(monkeypatch) -> None:
+    config = GenomeConfig(
+        rules=["Keep food available", "Collect wood", "Craft tools"]
+    ).model_dump()
+    responses = iter(
+        [
+            json.dumps(
+                {
+                    "config": {**config, "unrecognized_gene": True},
+                    "crossover_note": "Contains an undeclared gene.",
+                }
+            ),
+            json.dumps(
+                {
+                    "config": config,
+                    "crossover_note": "Used only declared genes.",
+                }
+            ),
+        ]
+    )
+    calls = 0
+
+    def fake_chat(**kwargs):
+        nonlocal calls
+        calls += 1
+        return next(responses)
+
+    monkeypatch.setattr("src.meta_agent.chat", fake_chat)
+
+    child, note = llm_crossover(GenomeConfig(), GenomeConfig())
+
+    assert calls == 2
+    assert child.rules == ["Keep food available", "Collect wood", "Craft tools"]
+    assert "attempt 2" in note
+
+
 def test_crossover_falls_back_only_after_all_attempts(monkeypatch) -> None:
     parent_a = GenomeConfig(rules=["Parent A rule"])
     calls = 0
@@ -67,7 +129,7 @@ def test_failed_mutation_identifies_the_retained_crossover_configuration(
 
 
 def test_noop_mutation_is_rejected_as_failed(monkeypatch) -> None:
-    crossover = GenomeConfig(rules=["Crossover rule"])
+    crossover = GenomeConfig(rules=["Crossover rule", "Second crossover rule"])
     response = json.dumps(
         {
             "config": crossover.model_dump(),
@@ -80,3 +142,23 @@ def test_noop_mutation_is_rejected_as_failed(monkeypatch) -> None:
 
     assert child == crossover
     assert note == "mutation failed — no configuration change"
+
+
+def test_mutation_rejects_prose_wrapped_json(monkeypatch) -> None:
+    crossover = GenomeConfig(rules=["Crossover rule"])
+    response = json.dumps(
+        {
+            "config": GenomeConfig(
+                rules=["Crossover rule", "New targeted rule"]
+            ).model_dump(),
+            "mutation_note": "Added a targeted rule.",
+        }
+    )
+    monkeypatch.setattr(
+        "src.meta_agent.chat", lambda **kwargs: f"Here is the mutation:\n{response}"
+    )
+
+    child, note = llm_mutate(crossover, [])
+
+    assert child == crossover
+    assert note == "mutation failed — kept crossover configuration"

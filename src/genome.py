@@ -6,20 +6,26 @@ import hashlib
 import json
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MemoryPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     type: Literal["none", "notes", "summary"] = "notes"
-    max_items: int = 20
+    max_items: int = Field(default=20, ge=0, le=200)
 
 
 class ContextBudget(BaseModel):
-    history_steps: int = 10
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    history_steps: int = Field(default=10, ge=0, le=200)
 
 
 class GenomeConfig(BaseModel):
     """The mutable part of a harness — this is what evolves."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     system_prompt: str = (
         "You are a Crafter survival agent. Stay alive and unlock achievements."

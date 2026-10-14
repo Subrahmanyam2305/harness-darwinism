@@ -170,6 +170,28 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
     assert {frame.decision_id for frame in frames[1:]} == {"decision-1"}
 
 
+def test_skill_controller_rejects_unknown_nested_state_fields(monkeypatch) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    response = (
+        '{"state_patch":{"known_locations":{"tree":{"direction":"east",'
+        '"estimated_distance":2,"last_seen_step":0,"unrecognized":true}}},'
+        '"skill":{"name":"explore","max_steps":1}}'
+    )
+    provider = FakeProvider([response, response, response])
+
+    trace = play_episode(
+        Genome(id="strict-state"),
+        seed=42,
+        max_steps=1,
+        provider=provider,
+        controller="skills",
+    )
+
+    assert trace.termination_reason == "agent_error"
+    assert trace.steps == 0
+    assert all(attempt["error"] == "invalid_output" for attempt in trace.attempts)
+
+
 def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -> None:
     monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
     captured: list[list[dict[str, str]]] = []
