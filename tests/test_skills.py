@@ -7,7 +7,12 @@ from pydantic import ValidationError
 
 from src.crafter_env import CrafterSnapshot, NearbyEntity
 from src.execution_state import ExecutionState, KnownLocation, StatePatch
-from src.skills import SkillRequest, execute_skill, feasible_skills
+from src.skills import (
+    SkillRequest,
+    assess_skill_affordances,
+    execute_skill,
+    feasible_skills,
+)
 
 
 def _snapshot(
@@ -61,6 +66,22 @@ def test_affordances_reject_target_when_required_direction_is_disallowed() -> No
     options = feasible_skills(snapshot, allowed_actions=["move_left", "do"])
 
     assert "acquire:tree" not in options
+
+
+def test_affordance_evidence_explains_feasible_and_blocked_skill_families() -> None:
+    snapshot = _snapshot(
+        entities=[NearbyEntity(kind="tree", direction="east", distance=2, dx=2, dy=0)]
+    )
+
+    evidence = assess_skill_affordances(snapshot, ["move_right", "do"])
+
+    assert any(item.option == "acquire:tree" and item.feasible for item in evidence)
+    assert any(
+        item.option == "engage"
+        and not item.feasible
+        and item.reason == "no_visible_engageable_threat"
+        for item in evidence
+    )
 
 
 def test_execution_state_bounds_model_owned_locations() -> None:
@@ -139,6 +160,7 @@ def test_acquire_skill_executes_multiple_local_steps_until_inventory_increases()
 
     assert result.status == "succeeded"
     assert result.actions == ["move_right", "do"]
+    assert any(check.check == "action_allowlist" for check in result.guard_checks)
     assert observed_actions == result.actions
     assert environment.wood == 1
 

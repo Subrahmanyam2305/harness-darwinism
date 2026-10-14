@@ -20,6 +20,24 @@ def test_skill_run_exposes_grouped_decisions_and_efficiency_metrics() -> None:
                 "actions": ["move_right", "do"],
                 "status": "succeeded",
                 "reason": "inventory_changed",
+                "state_before": {"goal": None},
+                "state_patch": {"goal": "collect wood"},
+                "state_after": {"goal": "collect wood"},
+                "affordances": [
+                    {
+                        "option": "acquire:tree",
+                        "feasible": True,
+                        "reason": "supported_by_current_state",
+                    }
+                ],
+                "guard_checks": [
+                    {
+                        "step": 0,
+                        "check": "action_allowlist",
+                        "passed": True,
+                        "detail": "move_right",
+                    }
+                ],
             }
         ],
         "history": [
@@ -42,6 +60,8 @@ def test_skill_run_exposes_grouped_decisions_and_efficiency_metrics() -> None:
     assert serialized["steps_per_model_call"] == 2.0
     assert serialized["tokens_per_environment_step"] == 30.0
     assert serialized["decisions"][0]["actions"] == ["move_right", "do"]
+    assert serialized["decisions"][0]["state_after"]["goal"] == "collect wood"
+    assert serialized["decisions"][0]["affordances"][0]["feasible"] is True
     assert serialized["history"][0]["decision_id"] == "decision-1"
 
 

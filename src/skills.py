@@ -16,6 +16,23 @@ SkillName = Literal[
 SkillStatus = Literal["succeeded", "failed", "interrupted", "exhausted", "terminal"]
 
 
+class SkillAffordance(BaseModel):
+    """One locally computed feasibility decision shown to the model and operator."""
+
+    option: str
+    feasible: bool
+    reason: str
+
+
+class GuardCheck(BaseModel):
+    """One deterministic safety or validity check made during local execution."""
+
+    step: int
+    check: str
+    passed: bool
+    detail: str
+
+
 class SkillRequest(BaseModel):
     """One validated, parameterized local behavior requested by the model."""
 
@@ -45,6 +62,7 @@ class SkillResult(BaseModel):
     reason: str
     actions: list[str] = Field(default_factory=list)
     steps: list[SkillStep] = Field(default_factory=list)
+    guard_checks: list[GuardCheck] = Field(default_factory=list)
     state: ExecutionState
 
 
@@ -148,6 +166,34 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
     return options
 
 
+def assess_skill_affordances(
+    snapshot: CrafterSnapshot, allowed_actions: list[str]
+) -> list[SkillAffordance]:
+    """Explain the local SayCan-inspired gate without exposing model reasoning."""
+    options = feasible_skills(snapshot, allowed_actions)
+    evidence = [
+        SkillAffordance(
+            option=option, feasible=True, reason="supported_by_current_state"
+        )
+        for option in options
+    ]
+    blocked_reasons = {
+        "explore": "no_allowed_movement_action",
+        "acquire": "no_visible_reachable_resource",
+        "evade": "no_visible_threat",
+        "engage": "no_visible_engageable_threat",
+        "build_or_craft": "requirements_or_action_unavailable",
+        "recover": "recovery_not_currently_needed_or_available",
+    }
+    offered_families = {option.split(":", 1)[0] for option in options}
+    evidence.extend(
+        SkillAffordance(option=name, feasible=False, reason=reason)
+        for name, reason in blocked_reasons.items()
+        if name not in offered_families
+    )
+    return evidence
+
+
 def _next_action(
     request: SkillRequest, snapshot: CrafterSnapshot, allowed_actions: set[str]
 ) -> str | None:
@@ -225,31 +271,71 @@ def execute_skill(
     initial_achievements = dict(before.achievements)
     actions: list[str] = []
     steps: list[SkillStep] = []
+    guard_checks: list[GuardCheck] = []
     runtime_state = state.model_copy(deep=True)
     reason = "local_step_budget_exhausted"
     status: SkillStatus = "exhausted"
 
     for _ in range(request.max_steps):
         snapshot = environment.snapshot()
-        if snapshot.inventory.get("health", 9) <= 2 and request.name not in {
+        health_safe = snapshot.inventory.get("health", 9) > 2 or request.name in {
             "evade",
             "recover",
-        }:
+        }
+        guard_checks.append(
+            GuardCheck(
+                step=snapshot.step,
+                check="critical_health",
+                passed=health_safe,
+                detail=f"health={snapshot.inventory.get('health', 9)}",
+            )
+        )
+        if not health_safe:
             status, reason = "interrupted", "critical_health"
             break
         threat = _entity(snapshot, {"zombie", "skeleton", "arrow", "lava"})
-        if (
+        threat_safe = not (
             threat is not None
             and threat.distance <= 1
             and request.name not in {"evade", "engage", "recover"}
-        ):
+        )
+        guard_checks.append(
+            GuardCheck(
+                step=snapshot.step,
+                check="nearby_threat",
+                passed=threat_safe,
+                detail=(
+                    f"{threat.kind}@{threat.distance}"
+                    if threat is not None
+                    else "none_visible"
+                ),
+            )
+        )
+        if not threat_safe:
             status, reason = "interrupted", "nearby_threat"
             break
         action = _next_action(request, snapshot, set(allowed_actions))
+        guard_checks.append(
+            GuardCheck(
+                step=snapshot.step,
+                check="action_resolved",
+                passed=action is not None,
+                detail=action or "no_local_action",
+            )
+        )
         if action is None:
             status, reason = "interrupted", "target_or_action_unavailable"
             break
-        if action not in allowed_actions:
+        action_allowed = action in allowed_actions
+        guard_checks.append(
+            GuardCheck(
+                step=snapshot.step,
+                check="action_allowlist",
+                passed=action_allowed,
+                detail=action,
+            )
+        )
+        if not action_allowed:
             status, reason = "interrupted", "action_not_allowed"
             break
         observation, reward, done, _info = environment.step(action)
@@ -313,5 +399,10 @@ def execute_skill(
             last_attempt_step=environment.step_count,
         )
     return SkillResult(
-        status=status, reason=reason, actions=actions, steps=steps, state=runtime_state
+        status=status,
+        reason=reason,
+        actions=actions,
+        steps=steps,
+        guard_checks=guard_checks,
+        state=runtime_state,
     )

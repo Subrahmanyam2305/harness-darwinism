@@ -17,6 +17,10 @@ function pickDefaultRun(runs: RunSummary[]): RunSummary | null {
   return [...runs].sort((a, b) => b.score - a.score)[0];
 }
 
+function stateValue(value: string | number | null | undefined) {
+  return value == null || value === "" ? "—" : String(value);
+}
+
 export function GameReplay({ runs, genomeId }: Props) {
   const [selectedRun, setSelectedRun] = useState<RunSummary | null>(
     pickDefaultRun(runs)
@@ -78,6 +82,13 @@ export function GameReplay({ runs, genomeId }: Props) {
   const step = steps[currentStep];
   const currentDecision = selectedRun?.decisions?.find(
     (decision) => decision.decision_id === step?.decision_id
+  );
+  const currentActionIndex =
+    currentDecision?.step_started != null && step?.step != null
+      ? Math.max(0, step.step - currentDecision.step_started - 1)
+      : -1;
+  const currentGuards = currentDecision?.guard_checks?.filter(
+    (check) => step?.step == null || check.step === step.step - 1
   );
 
   if (!runs.length) return null;
@@ -270,6 +281,97 @@ export function GameReplay({ runs, genomeId }: Props) {
           </AnimatePresence>
         </div>
       </div>
+
+      {selectedRun?.controller === "skills" && (
+        <section className="controller-evidence" aria-label="Skill controller evidence">
+          <div className="evidence-heading">
+            <div>
+              <span>Decision evidence</span>
+              <h3>{currentDecision?.decision_id ?? "No linked decision"}</h3>
+            </div>
+            <p>Skill State lives for one episode and each decision snapshot is persisted in the Atlas run trace.</p>
+          </div>
+
+          {currentDecision ? (
+            <>
+              <div className="state-flow">
+                {[
+                  ["Before", currentDecision.state_before],
+                  ["Model patch", currentDecision.state_patch],
+                  ["Persisted after", currentDecision.state_after],
+                ].map(([label, state]) => {
+                  const value = state as typeof currentDecision.state_before;
+                  return (
+                    <div className="state-card" key={label as string}>
+                      <strong>{label as string}</strong>
+                      <dl>
+                        <div><dt>Phase</dt><dd>{stateValue(value?.phase)}</dd></div>
+                        <div><dt>Goal</dt><dd>{stateValue(value?.goal)}</dd></div>
+                        <div><dt>Subgoal</dt><dd>{stateValue(value?.subgoal)}</dd></div>
+                        <div><dt>No progress</dt><dd>{stateValue(value?.no_progress_steps)}</dd></div>
+                        <div><dt>Known locations</dt><dd>{value?.known_locations ? Object.keys(value.known_locations).length : "—"}</dd></div>
+                        <div><dt>Failed skills</dt><dd>{value?.failed_skills ? Object.keys(value.failed_skills).length : "—"}</dd></div>
+                      </dl>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="controller-grid">
+                <div className="evidence-card">
+                  <div className="evidence-title">
+                    <span className="evidence-kicker">SayCan-inspired</span>
+                    <h3>Local affordance gate</h3>
+                  </div>
+                  <div className="affordance-list">
+                    {currentDecision.affordances?.map((item) => (
+                      <div className={`affordance-row ${item.feasible ? "feasible" : "blocked"}`} key={`${item.option}-${item.reason}`}>
+                        <span>{item.feasible ? "✓" : "×"}</span>
+                        <strong>{item.option}</strong>
+                        <small>{item.reason.replaceAll("_", " ")}</small>
+                      </div>
+                    )) ?? <p className="evidence-unavailable">Unavailable for this recorded run.</p>}
+                  </div>
+                </div>
+
+                <div className="evidence-card">
+                  <div className="evidence-title">
+                    <span className="evidence-kicker">ReAct-inspired</span>
+                    <h3>Act, observe, replan</h3>
+                  </div>
+                  <div className="react-cycle">
+                    <div><span>Observe</span><p>{currentDecision.observation_before ?? "Unavailable"}</p></div>
+                    <div><span>Select</span><p>{currentDecision.skill.name}{currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need ? `: ${currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need}` : ""}</p></div>
+                    <div>
+                      <span>Act locally</span>
+                      <div className="action-sequence">
+                        {currentDecision.actions.map((action, index) => (
+                          <code className={index === currentActionIndex ? "current" : ""} key={`${action}-${index}`}>{action}</code>
+                        ))}
+                      </div>
+                    </div>
+                    <div><span>Outcome</span><p>{currentDecision.status}: {currentDecision.reason ?? "reason unavailable"}</p></div>
+                    <div><span>Latest observation</span><p>{currentDecision.observation_after ?? "Unavailable"}</p></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="guard-strip">
+                <strong>Local checks before this action</strong>
+                <div>
+                  {(currentGuards?.length ? currentGuards : currentDecision.guard_checks)?.map((check, index) => (
+                    <span className={check.passed ? "passed" : "failed"} key={`${check.step}-${check.check}-${index}`}>
+                      {check.passed ? "✓" : "×"} {check.check.replaceAll("_", " ")} · {check.detail}
+                    </span>
+                  )) ?? <em>Unavailable for this recorded run.</em>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="evidence-unavailable">This replay step has no persisted skill decision evidence.</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

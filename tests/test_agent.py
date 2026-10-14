@@ -157,6 +157,16 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
     assert trace.decisions[0]["skill"]["name"] == "acquire"
     assert trace.decisions[0]["actions"] == ["move_right", "do"]
     assert trace.decisions[0]["status"] in {"succeeded", "terminal"}
+    assert trace.decisions[0]["state_before"]["goal"] is None
+    assert trace.decisions[0]["state_patch"]["goal"] == "collect wood"
+    assert trace.decisions[0]["state_after"]["goal"] == "collect wood"
+    assert any(
+        item["option"] == "acquire:tree" and item["feasible"]
+        for item in trace.decisions[0]["affordances"]
+    )
+    assert trace.decisions[0]["guard_checks"]
+    assert "tree" in trace.decisions[0]["observation_before"]
+    assert trace.decisions[0]["observation_after"] == "after do"
     assert {frame.decision_id for frame in frames[1:]} == {"decision-1"}
 
 

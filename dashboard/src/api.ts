@@ -62,6 +62,8 @@ export interface ReplayStep {
 
 export interface SkillDecision {
   decision_id: string;
+  step_started?: number;
+  step_ended?: number;
   skill: {
     name: string;
     target?: string | null;
@@ -71,6 +73,36 @@ export interface SkillDecision {
   actions: string[];
   status: string;
   reason?: string;
+  state_before?: ExecutionState;
+  state_patch?: Partial<ExecutionState>;
+  state_after?: ExecutionState;
+  affordances?: SkillAffordance[];
+  guard_checks?: GuardCheck[];
+  observation_before?: string;
+  observation_after?: string;
+  attempts?: number;
+}
+
+export interface ExecutionState {
+  phase: string;
+  goal?: string | null;
+  subgoal?: string | null;
+  known_locations: Record<string, unknown>;
+  failed_skills: Record<string, unknown>;
+  no_progress_steps: number;
+}
+
+export interface SkillAffordance {
+  option: string;
+  feasible: boolean;
+  reason: string;
+}
+
+export interface GuardCheck {
+  step: number;
+  check: string;
+  passed: boolean;
+  detail: string;
 }
 
 export interface RunSummary {

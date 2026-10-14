@@ -16,7 +16,12 @@ from src.crafter_env import ACTIONS, CrafterTextEnv
 from src.execution_state import ExecutionState, StatePatch, apply_state_patch
 from src.gameplay_provider import BedrockProvider, GameplayProvider, ProviderError
 from src.genome import Genome
-from src.skills import SkillRequest, SkillStep, execute_skill, feasible_skills
+from src.skills import (
+    SkillRequest,
+    SkillStep,
+    assess_skill_affordances,
+    execute_skill,
+)
 
 TerminationReason = Literal["death", "step_limit", "agent_error"]
 ControllerMode = Literal["primitive", "skills"]
@@ -52,7 +57,7 @@ class EpisodeTrace:
     model_calls: int = 0
     cache_read_tokens: int | None = None
     cache_write_tokens: int | None = None
-    schema_version: int = 2
+    schema_version: int = 3
 
     def to_dict(self) -> dict:
         """Return JSON-compatible data for persistence and API consumers."""
@@ -233,7 +238,8 @@ def _play_skill_episode(
     emit(None)
     while environment.step_count < max_steps:
         snapshot = environment.snapshot()
-        feasible = feasible_skills(snapshot, config.tools)
+        affordances = assess_skill_affordances(snapshot, config.tools)
+        feasible = [item.option for item in affordances if item.feasible]
         if not feasible:
             termination_reason = "agent_error"
             terminal_error = "No feasible skills for the current genome tool allowlist"
@@ -321,6 +327,7 @@ def _play_skill_episode(
 
         state_before = state.model_dump()
         state = apply_state_patch(state, parsed.state_patch)
+        decision_observation = observation
         request = parsed.skill.model_copy(
             update={
                 "max_steps": min(
@@ -373,10 +380,14 @@ def _play_skill_episode(
                 "state_before": state_before,
                 "state_after": state.model_dump(),
                 "state_patch": parsed.state_patch.model_dump(exclude_none=True),
+                "affordances": [item.model_dump() for item in affordances],
                 "skill": request.model_dump(),
                 "status": result.status,
                 "reason": result.reason,
                 "actions": result.actions,
+                "guard_checks": [check.model_dump() for check in result.guard_checks],
+                "observation_before": decision_observation,
+                "observation_after": observation,
                 "attempts": len(decision_attempts),
             }
         )
