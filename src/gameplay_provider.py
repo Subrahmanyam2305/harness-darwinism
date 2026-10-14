@@ -22,6 +22,8 @@ class ModelReply:
     output_tokens: int | None = None
     cost_usd: float | None = None
     latency_seconds: float = 0.0
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
 
 
 class ProviderError(RuntimeError):
@@ -54,6 +56,9 @@ class BedrockProvider:
             None,
         )
         try:
+            cache_system = bool(
+                system and "claude-haiku-4-5" in self.model and len(system) // 4 >= 4096
+            )
             response = converse(
                 messages=[
                     message for message in messages if message["role"] != "system"
@@ -62,6 +67,7 @@ class BedrockProvider:
                 model=self.model,
                 max_tokens=150,
                 temperature=0.0,
+                cache_system=cache_system,
             )
         except (BotoCoreError, ClientError) as error:
             raise ProviderError("Bedrock inference failed") from error
@@ -71,6 +77,8 @@ class BedrockProvider:
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
             latency_seconds=response.latency_seconds,
+            cache_read_tokens=response.cache_read_tokens,
+            cache_write_tokens=response.cache_write_tokens,
         )
 
 

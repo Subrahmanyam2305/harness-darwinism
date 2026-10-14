@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from src.agent import play_episode
+from src.crafter_env import CrafterSnapshot, NearbyEntity
 from src.genome import Genome, GenomeConfig
 
 
@@ -25,6 +28,58 @@ class FakeProvider:
 
     def complete(self, messages: list[dict[str, str]]) -> FakeReply:
         return FakeReply(next(self.replies))
+
+
+class FakeSkillEnvironment:
+    """Two-step tree collection world for controller contract tests."""
+
+    def __init__(self, seed=None, max_steps=200):
+        self.max_steps = max_steps
+        self.step_count = 0
+        self.wood = 0
+        self.info = {
+            "inventory": {"health": 9, "food": 9, "drink": 9, "energy": 9, "wood": 0}
+        }
+
+    def reset(self):
+        return "tree: east (dist 2)"
+
+    def snapshot(self):
+        distance = max(1, 2 - self.step_count)
+        return CrafterSnapshot(
+            step=self.step_count,
+            inventory={**self.info["inventory"], "wood": self.wood},
+            achievements={"collect_wood": self.wood > 0},
+            nearby_entities=[
+                NearbyEntity(
+                    kind="tree", direction="east", distance=distance, dx=distance, dy=0
+                )
+            ],
+            facing="east",
+            daylight=1.0,
+            sleeping=False,
+        )
+
+    def step(self, action):
+        self.step_count += 1
+        if action == "do":
+            self.wood += 1
+        self.info["inventory"]["wood"] = self.wood
+        return (
+            f"after {action}",
+            float(action == "do"),
+            self.step_count >= self.max_steps,
+            self.info,
+        )
+
+    def render(self):
+        return np.zeros((8, 8, 3), dtype=np.uint8)
+
+    def get_achievements(self):
+        return {"collect_wood": self.wood > 0}
+
+    def get_score(self):
+        return float(self.wood > 0)
 
 
 def test_invalid_replies_retry_without_advancing_crafter() -> None:
@@ -68,3 +123,73 @@ def test_genome_tool_allowlist_is_enforced() -> None:
     assert trace.termination_reason == "agent_error"
     assert trace.steps == 0
     assert all(attempt["error"] == "invalid_output" for attempt in trace.attempts)
+
+
+def test_skill_controller_executes_multiple_steps_from_one_model_decision(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    provider = FakeProvider(
+        [
+            (
+                '{"state_patch":{"goal":"collect wood","subgoal":"reach tree"},'
+                '"skill":{"name":"acquire","target":"tree","max_steps":4}}'
+            )
+        ]
+    )
+
+    trace = play_episode(
+        Genome(id="skills", genome=GenomeConfig(tools=["move_right", "do"])),
+        seed=42,
+        max_steps=2,
+        provider=provider,
+        controller="skills",
+    )
+
+    assert trace.steps == 2
+    assert trace.model_calls == 1
+    assert trace.controller == "skills"
+    assert [item["action"] for item in trace.history] == ["move_right", "do"]
+    assert len({item["decision_id"] for item in trace.history}) == 1
+    assert trace.decisions[0]["skill"]["name"] == "acquire"
+    assert trace.decisions[0]["actions"] == ["move_right", "do"]
+    assert trace.decisions[0]["status"] in {"succeeded", "terminal"}
+
+
+def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    captured: list[list[dict[str, str]]] = []
+
+    class CapturingProvider(FakeProvider):
+        def complete(self, messages):
+            captured.append(messages)
+            return super().complete(messages)
+
+    provider = CapturingProvider(
+        [
+            (
+                '{"state_patch":{"goal":"explore"},'
+                '"skill":{"name":"explore","max_steps":1}}'
+            ),
+            (
+                '{"state_patch":{"subgoal":"collect tree"},'
+                '"skill":{"name":"acquire","target":"tree","max_steps":1}}'
+            ),
+        ]
+    )
+
+    trace = play_episode(
+        Genome(id="compact"),
+        seed=42,
+        max_steps=2,
+        provider=provider,
+        controller="skills",
+        max_skill_steps=1,
+    )
+
+    assert trace.model_calls == 2
+    assert len(captured) == 2
+    assert all(len(messages) == 2 for messages in captured)
+    assert "thought" not in captured[1][0]["content"].lower()
+    assert "Execution state" in captured[1][1]["content"]
+    assert [message["role"] for message in captured[1]] == ["system", "user"]

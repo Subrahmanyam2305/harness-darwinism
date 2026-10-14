@@ -41,6 +41,8 @@ class LLMResponse:
     input_tokens: int | None
     output_tokens: int | None
     latency_seconds: float
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
 
 
 def converse(
@@ -49,6 +51,7 @@ def converse(
     max_tokens: int = 300,
     temperature: float = 0.3,
     system: str | None = None,
+    cache_system: bool = False,
 ) -> LLMResponse:
     """Send one Bedrock Converse request and retain usage metadata."""
     client = _get_client()
@@ -80,6 +83,8 @@ def converse(
     }
     if system:
         kwargs["system"] = [{"text": system}]
+        if cache_system:
+            kwargs["system"].append({"cachePoint": {"type": "default"}})
 
     started = perf_counter()
     response = client.converse(**kwargs)
@@ -92,6 +97,8 @@ def converse(
         input_tokens=usage.get("inputTokens"),
         output_tokens=usage.get("outputTokens"),
         latency_seconds=latency,
+        cache_read_tokens=usage.get("cacheReadInputTokens"),
+        cache_write_tokens=usage.get("cacheWriteInputTokens"),
     )
 
 
