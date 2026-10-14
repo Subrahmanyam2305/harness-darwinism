@@ -101,14 +101,26 @@ export function GameReplay({ runs, genomeId }: Props) {
           {runs.map((run) => (
             <button
               key={run.id ?? run.seed}
-              className={`replay-btn ${selectedRun?.seed === run.seed ? "active" : ""}`}
+              className={`replay-btn ${
+                selectedRun?.id && run.id
+                  ? selectedRun.id === run.id
+                    ? "active"
+                    : ""
+                  : selectedRun?.seed === run.seed
+                    ? "active"
+                    : ""
+              }`}
               onClick={() => {
                 setSelectedRun(run);
                 setPlaying(false);
               }}
               title={`Seed ${run.seed} — Score ${run.score?.toFixed(1)}`}
             >
-              🌱
+              {run.controller_arm === "primitive"
+                ? "P"
+                : run.controller_arm === "skills"
+                  ? "S"
+                  : "🌱"}
             </button>
           ))}
         </div>
@@ -133,6 +145,12 @@ export function GameReplay({ runs, genomeId }: Props) {
           <div><span>Environment steps</span><strong>{selectedRun.environment_steps ?? selectedRun.steps}</strong></div>
           <div><span>Steps / call</span><strong>{selectedRun.steps_per_model_call?.toFixed(2) ?? "Unavailable"}</strong></div>
           <div><span>Tokens / step</span><strong>{selectedRun.tokens_per_environment_step?.toFixed(1) ?? "Unavailable"}</strong></div>
+          <div>
+            <span>Cache read / write</span>
+            <strong>
+              {selectedRun.cache_read_tokens ?? "Unavailable"} / {selectedRun.cache_write_tokens ?? "Unavailable"}
+            </strong>
+          </div>
           <div><span>Latency</span><strong>{selectedRun.latency_seconds != null ? `${selectedRun.latency_seconds.toFixed(1)}s` : "Unavailable"}</strong></div>
         </div>
         </>
@@ -157,7 +175,7 @@ export function GameReplay({ runs, genomeId }: Props) {
             <img
               src={
                 steps.length > 0 && frameUrl
-                  ? `${frameUrl}/${currentStep}`
+                  ? `${frameUrl}/${step?.step ?? currentStep}`
                   : gifUrl
               }
               alt={`Crafter replay: ${genomeId} seed ${selectedRun?.seed}`}
@@ -233,7 +251,9 @@ export function GameReplay({ runs, genomeId }: Props) {
                     <div className="replay-decision">
                       <span>
                         {step.skill ?? "skill"}
-                        {currentDecision?.skill.target ? `: ${currentDecision.skill.target}` : ""}
+                        {currentDecision && (currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need)
+                          ? `: ${currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need}`
+                          : ""}
                       </span>
                       <code>{step.decision_id}</code>
                       {step.skill_status && <em>{step.skill_status}</em>}

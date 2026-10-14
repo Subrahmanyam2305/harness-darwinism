@@ -104,7 +104,7 @@ function App() {
           </div>
 
           {/* Game Replay — show when a genome is selected */}
-          <div ref={detailRef}>
+          <div ref={detailRef} className="detail-anchor">
           <AnimatePresence>
             {replayRuns.length > 0 && (
               <motion.div

@@ -3,12 +3,14 @@
 from copy import deepcopy
 
 import numpy as np
+import pytest
 
 from src.agent import EpisodeFrame, EpisodeTrace
 from src.config import settings
 from src.evolution import (
     _novelty_fallback,
     _resume_seeds,
+    _validate_resume_evidence,
     evaluate_genome,
     evaluate_population,
     run_generation,
@@ -111,6 +113,29 @@ def test_resume_recovers_seeds_from_metrics_before_latest_generation_runs(
     )
 
     assert _resume_seeds(object(), population, 3, "resumed") == [105]
+
+
+def test_resume_rejects_controller_change(monkeypatch) -> None:
+    population = seed_population(2, experiment_id="resumed")
+    monkeypatch.setattr(
+        "src.evolution.get_runs_for_genome",
+        lambda db, genome_id: [
+            {
+                "generation": 0,
+                "controller": "primitive",
+                "max_steps": 100,
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="controller"):
+        _validate_resume_evidence(
+            object(),
+            population,
+            controller="skills",
+            max_steps=100,
+            max_skill_steps=3,
+        )
 
 
 def test_duplicate_llm_mutation_gets_deterministic_novelty_fallback(

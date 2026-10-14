@@ -116,4 +116,3 @@
 - [x] Run Python tests, Ruff checks, dashboard lint, and dashboard build.
 - [x] Run an offline seeded Crafter skill-controller smoke check and inspect its replay without paid inference.
 - [x] Verify the final diff, commit remaining changes, and move issues #10-#15 to In review.
-

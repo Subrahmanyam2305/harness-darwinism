@@ -361,6 +361,8 @@ main {
   border-color: var(--border-active);
 }
 
+.detail-anchor { scroll-margin-top: 96px; }
+
 .replay-header {
   display: flex;
   justify-content: space-between;
@@ -370,7 +372,7 @@ main {
 
 .efficiency-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
   margin-bottom: 18px;
 }
@@ -505,7 +507,12 @@ main {
   font-style: normal;
 }
 
-.replay-decision code { color: var(--text-tertiary); }
+.replay-decision code {
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
 
 .replay-decision p {
   flex-basis: 100%;

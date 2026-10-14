@@ -62,7 +62,12 @@ export interface ReplayStep {
 
 export interface SkillDecision {
   decision_id: string;
-  skill: { name: string; target?: string | null };
+  skill: {
+    name: string;
+    target?: string | null;
+    goal?: string | null;
+    need?: string | null;
+  };
   actions: string[];
   status: string;
   reason?: string;
@@ -80,6 +85,8 @@ export interface RunSummary {
   steps_per_model_call?: number | null;
   tokens_per_environment_step?: number | null;
   latency_seconds?: number | null;
+  cache_read_tokens?: number | null;
+  cache_write_tokens?: number | null;
   comparison_id?: string;
   controller_arm?: string;
   paired_seed?: number;

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProgressPhase(StrEnum):
@@ -40,18 +40,24 @@ class ExecutionState(BaseModel):
     phase: ProgressPhase = ProgressPhase.BASIC_RESOURCES
     goal: str | None = Field(default=None, max_length=160)
     subgoal: str | None = Field(default=None, max_length=160)
-    known_locations: dict[str, KnownLocation] = Field(default_factory=dict)
-    failed_skills: dict[str, SkillFailure] = Field(default_factory=dict)
+    known_locations: dict[str, KnownLocation] = Field(
+        default_factory=dict, max_length=20
+    )
+    failed_skills: dict[str, SkillFailure] = Field(default_factory=dict, max_length=20)
     no_progress_steps: int = Field(default=0, ge=0, le=20)
 
 
 class StatePatch(BaseModel):
     """Validated partial update proposed by the gameplay model."""
 
+    model_config = ConfigDict(extra="forbid", strict=True)
+
     phase: ProgressPhase | None = None
     goal: str | None = Field(default=None, max_length=160)
     subgoal: str | None = Field(default=None, max_length=160)
-    known_locations: dict[str, KnownLocation] | None = None
+    known_locations: dict[str, KnownLocation] | None = Field(
+        default=None, max_length=20
+    )
 
 
 def apply_state_patch(state: ExecutionState, patch: StatePatch) -> ExecutionState:

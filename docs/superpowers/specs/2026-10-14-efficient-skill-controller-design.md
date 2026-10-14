@@ -20,4 +20,3 @@ Candidate episodes may run concurrently with bounded workers. Each worker owns i
 - Keep primitive-controller records readable.
 - Do not launch paid evolution automatically.
 - Prompt caching is optional and must not pad prompts to reach provider minimums.
-

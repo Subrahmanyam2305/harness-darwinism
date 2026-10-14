@@ -46,6 +46,7 @@ class EpisodeTrace:
     harness: dict = field(default_factory=dict)
     artifact_path: str | None = None
     max_steps: int = 200
+    max_skill_steps: int | None = None
     controller: ControllerMode = "primitive"
     decisions: list[dict] = field(default_factory=list)
     model_calls: int = 0
@@ -421,6 +422,7 @@ def _play_skill_episode(
         error=terminal_error,
         harness=json.loads(config.model_dump_json()),
         max_steps=max_steps,
+        max_skill_steps=max_skill_steps,
         controller="skills",
         decisions=decisions,
         model_calls=len(attempts),

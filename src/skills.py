@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.crafter_env import CrafterSnapshot, NearbyEntity
 from src.execution_state import ExecutionState, SkillFailure
@@ -18,6 +18,8 @@ SkillStatus = Literal["succeeded", "failed", "interrupted", "exhausted", "termin
 
 class SkillRequest(BaseModel):
     """One validated, parameterized local behavior requested by the model."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     name: SkillName
     target: str | None = Field(default=None, max_length=40)
@@ -80,25 +82,38 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
     """Return compact skill options grounded in the current state and tool list."""
     allowed = set(allowed_actions)
     options: list[str] = []
-    if allowed.intersection({"move_left", "move_right", "move_up", "move_down"}):
+    if _next_action(SkillRequest(name="explore"), snapshot, allowed) in allowed:
         options.append("explore")
     for entity in snapshot.nearby_entities:
         if (
             entity.kind
             in {"tree", "stone", "coal", "iron", "diamond", "cow", "plant", "water"}
             and "do" in allowed
+            and _next_action(
+                SkillRequest(name="acquire", target=entity.kind), snapshot, allowed
+            )
+            in allowed
         ):
             option = f"acquire:{entity.kind}"
             if option not in options:
                 options.append(option)
         if entity.kind in {"zombie", "skeleton", "arrow"}:
-            if allowed.intersection(
-                {"move_left", "move_right", "move_up", "move_down"}
+            if (
+                _next_action(
+                    SkillRequest(name="evade", target=entity.kind), snapshot, allowed
+                )
+                in allowed
             ):
                 option = f"evade:{entity.kind}"
                 if option not in options:
                     options.append(option)
-            if "do" in allowed:
+            if (
+                "do" in allowed
+                and _next_action(
+                    SkillRequest(name="engage", target=entity.kind), snapshot, allowed
+                )
+                in allowed
+            ):
                 option = f"engage:{entity.kind}"
                 if option not in options:
                     options.append(option)
@@ -122,19 +137,27 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
         if ready and action in allowed:
             options.append(f"build_or_craft:{goal}")
     for need in ("health", "food", "drink", "energy"):
-        if snapshot.inventory.get(need, 9) < 5 and (
-            need != "energy" or "sleep" in allowed
+        request = SkillRequest(name="recover", need=need)
+        if (
+            snapshot.inventory.get(need, 9) < 5
+            and _next_action(request, snapshot, allowed) in allowed
         ):
             options.append(f"recover:{need}")
-    if "sleep" in allowed:
+    if "sleep" in allowed and "recover:energy" not in options:
         options.append("recover:energy")
     return options
 
 
-def _next_action(request: SkillRequest, snapshot: CrafterSnapshot) -> str | None:
-    moves = ["move_up", "move_right", "move_down", "move_left"]
+def _next_action(
+    request: SkillRequest, snapshot: CrafterSnapshot, allowed_actions: set[str]
+) -> str | None:
+    moves = [
+        action
+        for action in ["move_up", "move_right", "move_down", "move_left"]
+        if action in allowed_actions
+    ]
     if request.name == "explore":
-        return moves[snapshot.step % len(moves)]
+        return moves[snapshot.step % len(moves)] if moves else None
     if request.name in {"acquire", "engage"}:
         target = _entity(snapshot, {request.target or ""})
         if target is None:
@@ -148,7 +171,7 @@ def _next_action(request: SkillRequest, snapshot: CrafterSnapshot) -> str | None
         )
         return _move_away(threat) if threat else None
     if request.name == "build_or_craft":
-        return {
+        action = {
             "table": "place_table",
             "furnace": "place_furnace",
             "wood_pickaxe": "make_wood_pickaxe",
@@ -158,6 +181,7 @@ def _next_action(request: SkillRequest, snapshot: CrafterSnapshot) -> str | None
             "stone_sword": "make_stone_sword",
             "iron_sword": "make_iron_sword",
         }.get(request.goal or "")
+        return action
     if request.name == "recover":
         if request.need == "energy":
             return "sleep"
@@ -168,7 +192,7 @@ def _next_action(request: SkillRequest, snapshot: CrafterSnapshot) -> str | None
         }
         target = _entity(snapshot, target_kinds.get(request.need or "", set()))
         if target is None:
-            return moves[snapshot.step % len(moves)]
+            return moves[snapshot.step % len(moves)] if moves else None
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
         return _move_toward(target)
@@ -182,6 +206,8 @@ def _made_progress(
         reward > 0
         or before.inventory != after.inventory
         or before.achievements != after.achievements
+        or before.nearby_entities != after.nearby_entities
+        or before.facing != after.facing
     )
 
 
@@ -211,7 +237,15 @@ def execute_skill(
         }:
             status, reason = "interrupted", "critical_health"
             break
-        action = _next_action(request, snapshot)
+        threat = _entity(snapshot, {"zombie", "skeleton", "arrow", "lava"})
+        if (
+            threat is not None
+            and threat.distance <= 1
+            and request.name not in {"evade", "engage", "recover"}
+        ):
+            status, reason = "interrupted", "nearby_threat"
+            break
+        action = _next_action(request, snapshot, set(allowed_actions))
         if action is None:
             status, reason = "interrupted", "target_or_action_unavailable"
             break
@@ -271,6 +305,8 @@ def execute_skill(
             filter(None, [request.name, request.target, request.goal, request.need])
         )
         previous = runtime_state.failed_skills.get(key)
+        if previous is None and len(runtime_state.failed_skills) >= 20:
+            runtime_state.failed_skills.pop(next(iter(runtime_state.failed_skills)))
         runtime_state.failed_skills[key] = SkillFailure(
             count=min(20, (previous.count if previous else 0) + 1),
             last_failure=reason,

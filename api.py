@@ -159,6 +159,12 @@ def _serialize_run(run: dict) -> dict:
             "model_calls": model_calls,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "cache_read_tokens": trace.get(
+                "cache_read_tokens", document.get("cache_read_tokens")
+            ),
+            "cache_write_tokens": trace.get(
+                "cache_write_tokens", document.get("cache_write_tokens")
+            ),
             "latency_seconds": trace.get(
                 "latency_seconds", document.get("latency_seconds")
             ),

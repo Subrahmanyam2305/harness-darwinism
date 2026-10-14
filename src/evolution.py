@@ -314,12 +314,15 @@ def _run_document(genome: Genome, trace: EpisodeTrace, generation: int) -> dict:
     """Build the complete Atlas evidence document for one evaluated episode."""
     return {
         "_id": f"{genome.id}_s{trace.seed}",
+        "kind": "evolution_episode",
         "genome_id": genome.id,
         "generation": generation,
         "seed": trace.seed,
         "score": trace.score,
         "achievements": trace.achievements,
         "steps": trace.steps,
+        "max_steps": trace.max_steps,
+        "max_skill_steps": trace.max_skill_steps,
         "failure_summary": trace.failure_summary,
         "history": trace.history,
         "history_len": len(trace.history),
@@ -361,6 +364,49 @@ def _resume_seeds(
         if metric_seeds:
             return sorted(set(metric_seeds))
     return []
+
+
+def _validate_resume_evidence(
+    db,
+    genomes: list[Genome],
+    *,
+    controller: ControllerMode,
+    max_steps: int,
+    max_skill_steps: int,
+) -> None:
+    """Reject run-setting changes that would mix incomparable generations."""
+    runs = [
+        run
+        for genome in genomes
+        for run in get_runs_for_genome(db, genome.id)
+        if run.get("generation") is not None
+    ]
+    if not runs:
+        return
+    controllers = {run.get("controller", "primitive") for run in runs}
+    if controllers != {controller}:
+        raise ValueError(
+            f"Stored evolution controller is {sorted(controllers)}, requested {controller}"
+        )
+    stored_step_limits = {
+        run["max_steps"] for run in runs if run.get("max_steps") is not None
+    }
+    if stored_step_limits and stored_step_limits != {max_steps}:
+        raise ValueError(
+            f"Stored max_steps is {sorted(stored_step_limits)}, requested {max_steps}"
+        )
+    stored_skill_limits = {
+        run["max_skill_steps"] for run in runs if run.get("max_skill_steps") is not None
+    }
+    if (
+        controller == "skills"
+        and stored_skill_limits
+        and stored_skill_limits != {max_skill_steps}
+    ):
+        raise ValueError(
+            "Stored max_skill_steps is "
+            f"{sorted(stored_skill_limits)}, requested {max_skill_steps}"
+        )
 
 
 # ── Selection ──
@@ -719,6 +765,13 @@ def run_evolution(
                 f"Stored generation {start_generation} has {len(population)} genomes, "
                 f"expected {target_size}"
             )
+        _validate_resume_evidence(
+            db,
+            existing_genomes,
+            controller=controller,
+            max_steps=step_limit,
+            max_skill_steps=max_skill_steps,
+        )
         stored_seeds = _resume_seeds(db, population, start_generation, experiment_id)
         if len(stored_seeds) != seed_count:
             raise ValueError(
