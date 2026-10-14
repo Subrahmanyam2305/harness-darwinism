@@ -13,6 +13,8 @@ from pathlib import Path
 
 from rich.console import Console
 
+from src.config import settings
+
 console = Console()
 
 
@@ -20,17 +22,15 @@ def cmd_evolve(args):
     """Run the full evolution loop."""
     from src.evolution import calculate_elite_count, run_evolution
 
-    episode_count = args.population * args.seeds_per_generation * (args.generations + 1)
+    episode_count = (
+        settings.population_size * settings.seeds_per_gen * (args.generations + 1)
+    )
     decision_upper_bound = episode_count * args.max_steps
     retry_upper_bound = decision_upper_bound * 3
-    elite_count = (
-        args.survivors
-        if args.survivors is not None
-        else calculate_elite_count(args.population, args.elite_ratio)
-    )
-    children_per_generation = args.population - elite_count
+    elite_count = calculate_elite_count(settings.population_size, settings.elite_ratio)
+    children_per_generation = settings.population_size - elite_count
     crossover_calls = children_per_generation * args.generations
-    expected_mutation_calls = crossover_calls * args.mutation_rate
+    expected_mutation_calls = crossover_calls * settings.mutation_rate
     console.print(
         "[bold]Experiment call estimate[/bold]\n"
         f"  controller: {args.controller}\n"
@@ -46,24 +46,23 @@ def cmd_evolve(args):
     if args.controller == "skills":
         console.print(
             "  optimistic full-chunk estimate: "
-            f"{episode_count * math.ceil(args.max_steps / args.max_skill_steps):,} "
+            f"{episode_count * math.ceil(args.max_steps / settings.max_skill_steps):,} "
             "gameplay calls (actual calls depend on interruptions and retries)"
         )
     champion = run_evolution(
         max_generations=args.generations,
         train_seeds=args.train_seeds,
         experiment_id=args.experiment_id,
-        population_size=args.population,
-        survivors=args.survivors,
-        elite_ratio=args.elite_ratio,
-        mutation_rate=args.mutation_rate,
-        seeds_per_generation=args.seeds_per_generation,
+        population_size=settings.population_size,
+        elite_ratio=settings.elite_ratio,
+        mutation_rate=settings.mutation_rate,
+        seeds_per_generation=settings.seeds_per_gen,
         max_steps=args.max_steps,
         resume=args.resume,
         seed_profile=args.seed_profile,
         controller=args.controller,
         workers=args.workers,
-        max_skill_steps=args.max_skill_steps,
+        max_skill_steps=settings.max_skill_steps,
     )
     console.print("\n[bold]Champion rules:[/bold]")
     for i, rule in enumerate(champion.genome.rules, 1):
@@ -292,26 +291,6 @@ def main():
         help="Evolutionary transitions to run (additional transitions with --resume)",
     )
     p_evolve.add_argument("--experiment-id", required=True)
-    p_evolve.add_argument("--population", type=int, default=10)
-    p_evolve.add_argument(
-        "--survivors",
-        type=int,
-        default=None,
-        help="Exact elite count; overrides --elite-ratio for compatibility",
-    )
-    p_evolve.add_argument(
-        "--elite-ratio",
-        type=float,
-        default=0.3,
-        help="Fraction copied unchanged into the next generation",
-    )
-    p_evolve.add_argument(
-        "--mutation-rate",
-        type=float,
-        default=0.4,
-        help="Probability that a crossover child receives semantic mutation",
-    )
-    p_evolve.add_argument("--seeds-per-generation", type=int, default=1)
     p_evolve.add_argument(
         "--train-seeds",
         type=int,
@@ -336,12 +315,6 @@ def main():
         type=int,
         default=1,
         help="Maximum candidate episodes evaluated concurrently",
-    )
-    p_evolve.add_argument(
-        "--max-skill-steps",
-        type=int,
-        default=5,
-        help="Maximum local Crafter actions per skill decision (1-5)",
     )
     p_evolve.add_argument(
         "--resume",

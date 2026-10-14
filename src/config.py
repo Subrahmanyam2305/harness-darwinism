@@ -20,12 +20,12 @@ class Settings(BaseSettings):
 
     # Evolution
     population_size: int = 10
-    survivors: int = 5
     elite_ratio: float = 0.3
     mutation_rate: float = 0.4
-    seeds_per_gen: int = 5
+    seeds_per_gen: int = 1
     max_generations: int = 10
     max_steps_per_episode: int = 200
+    max_skill_steps: int = 5
     archive_sample_ratio: float = 0.1
 
     # Crafter

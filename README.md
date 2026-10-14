@@ -53,11 +53,11 @@ The `.env` file needs:
 ### 3. Run evolution
 
 ```bash
-# Quick test (2 genomes, 1 seed, 15 steps — ~2 min)
-python run.py evolve -g 1
+# Start an experiment
+python run.py evolve --experiment-id demo-v1 -g 1
 
-# Full run (default: 10 genomes, 5 seeds, 200 steps, 10 generations)
-python run.py evolve -g 5
+# Resume it with the skill controller and concurrent workers
+python run.py evolve --experiment-id demo-v1 -g 2 --max-steps 200 --controller skills --workers 10 --resume
 ```
 
 ### 4. Start the dashboard
@@ -139,16 +139,18 @@ If MongoDB is unavailable, the system automatically falls back to local JSON fil
 
 ## Customizing Evolution
 
-Edit parameters in `src/config.py` or override at runtime:
+Set the shared genetic policy in `.env`:
 
-```python
-from src.config import settings
-settings.population_size = 10   # genomes per generation
-settings.survivors = 5          # keep top N
-settings.seeds_per_gen = 5      # Crafter seeds per evaluation
-settings.max_steps_per_episode = 200  # steps per Crafter game
-settings.max_generations = 10   # when to stop
+```dotenv
+POPULATION_SIZE=10
+ELITE_RATIO=0.3
+MUTATION_RATE=0.4
+SEEDS_PER_GEN=1
+MAX_SKILL_STEPS=5
 ```
+
+Use `python run.py evolve --help` for per-run controls such as generations,
+step limit, controller, workers, seed profile, and resume.
 
 ## Architecture
 

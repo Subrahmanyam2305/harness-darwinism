@@ -1,7 +1,10 @@
 """CLI command wiring checks that avoid provider and database calls."""
 
+import sys
 from argparse import Namespace
 from pathlib import Path
+
+import pytest
 
 import run
 from src.config import Settings
@@ -17,10 +20,11 @@ def test_evolution_policy_defaults_to_thirty_percent_elites_and_forty_percent_mu
     assert defaults.mutation_rate == 0.4
 
 
-def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
+def test_evolve_uses_settings_for_fixed_policy_and_forwards_run_controls(
     monkeypatch, capsys
 ) -> None:
     captured: dict = {}
+    monkeypatch.setattr(run, "settings", Settings(_env_file=None))
 
     def fake_run_evolution(**kwargs):
         captured.update(kwargs)
@@ -30,18 +34,12 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
     args = Namespace(
         generations=2,
         experiment_id="strong-seeds-200-v1",
-        population=10,
-        survivors=5,
-        elite_ratio=0.3,
-        mutation_rate=0.4,
-        seeds_per_generation=1,
         max_steps=200,
         resume=False,
         seed_profile="strong-v2",
         train_seeds=[105],
         controller="skills",
         workers=3,
-        max_skill_steps=4,
     )
 
     run.cmd_evolve(args)
@@ -50,11 +48,32 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
     assert captured["train_seeds"] == [105]
     assert captured["controller"] == "skills"
     assert captured["workers"] == 3
-    assert captured["max_skill_steps"] == 4
+    assert captured["population_size"] == 10
+    assert captured["seeds_per_generation"] == 1
+    assert captured["max_skill_steps"] == 5
     assert captured["elite_ratio"] == 0.3
     assert captured["mutation_rate"] == 0.4
     output = capsys.readouterr().out
     assert "worst-case retry upper bound: 18,000 gameplay calls" in output
+
+
+def test_evolve_help_hides_fixed_policy_arguments(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["run.py", "evolve", "--help"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        run.main()
+
+    assert exit_info.value.code == 0
+    output = capsys.readouterr().out
+    for removed in (
+        "--population",
+        "--survivors",
+        "--elite-ratio",
+        "--mutation-rate",
+        "--seeds-per-generation",
+        "--max-skill-steps",
+    ):
+        assert removed not in output
 
 
 def test_compare_controllers_uses_identical_settings(monkeypatch, tmp_path) -> None:
