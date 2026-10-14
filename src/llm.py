@@ -8,7 +8,7 @@ from typing import Any
 
 import boto3
 
-from src.config import settings
+from src.settings import settings
 
 _client: Any = None
 

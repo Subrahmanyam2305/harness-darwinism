@@ -139,14 +139,14 @@ If MongoDB is unavailable, the system automatically falls back to local JSON fil
 
 ## Customizing Evolution
 
-Set the shared genetic policy in `.env`:
+Set the shared genetic policy in `config.yml`:
 
-```dotenv
-POPULATION_SIZE=10
-ELITE_RATIO=0.3
-MUTATION_RATE=0.4
-SEEDS_PER_GEN=1
-MAX_SKILL_STEPS=5
+```yaml
+population_size: 10
+elite_ratio: 0.3
+mutation_rate: 0.4
+seeds_per_gen: 1
+max_skill_steps: 5
 ```
 
 Use `python run.py evolve --help` for per-run controls such as generations,

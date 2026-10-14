@@ -1,0 +1,6 @@
+# Shared non-secret evolution policy.
+population_size: 10
+elite_ratio: 0.3
+mutation_rate: 0.4
+seeds_per_gen: 1
+max_skill_steps: 5

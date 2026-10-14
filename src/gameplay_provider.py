@@ -8,8 +8,8 @@ from typing import Protocol
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.config import settings
 from src.llm import converse
+from src.settings import settings
 
 
 @dataclass(frozen=True)

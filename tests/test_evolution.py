@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from src.agent import EpisodeFrame, EpisodeTrace
-from src.config import settings
 from src.evolution import (
     _novelty_fallback,
     _resume_seeds,
@@ -21,6 +20,7 @@ from src.evolution import (
     weighted_pairs,
 )
 from src.genome import Fitness, Genome, GenomeConfig
+from src.settings import settings
 
 
 def test_elite_ratio_creates_three_elites_and_seven_children_for_population_ten() -> (

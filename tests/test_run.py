@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 import run
-from src.config import Settings
 from src.genome import Genome
+from src.settings import Settings
 
 
 def test_evolution_policy_defaults_to_thirty_percent_elites_and_forty_percent_mutation() -> (

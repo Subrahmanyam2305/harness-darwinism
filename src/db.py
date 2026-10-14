@@ -10,8 +10,8 @@ from uuid import uuid4
 from pymongo.errors import PyMongoError
 
 from src.agent import EpisodeTrace
-from src.config import settings
 from src.genome import Genome
+from src.settings import settings
 
 DATA_DIR = settings.project_root / "data" / "store"
 
@@ -263,9 +263,7 @@ def record_metrics(
         "timestamp": datetime.now(UTC).isoformat(),
     }
     if db is not None:
-        db["metrics"].replace_one(
-            {"generation": gen, "arm": arm}, doc, upsert=True
-        )
+        db["metrics"].replace_one({"generation": gen, "arm": arm}, doc, upsert=True)
     else:
         _save_doc("metrics", f"gen_{gen}_{arm}", doc)
 

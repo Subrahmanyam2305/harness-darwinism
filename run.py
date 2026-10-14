@@ -13,7 +13,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from src.config import settings
+from src.settings import settings
 
 console = Console()
 

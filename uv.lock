@@ -176,6 +176,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymongo" },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -200,6 +201,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.3" },
     { name = "pymongo", extras = ["srv"], specifier = ">=4.7" },
     { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },

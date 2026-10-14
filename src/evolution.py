@@ -14,7 +14,6 @@ from rich.console import Console
 from rich.table import Table
 
 from src.agent import ControllerMode, EpisodeTrace, play_episode
-from src.config import settings
 from src.db import (
     ensure_indexes,
     get_all_genomes,
@@ -32,6 +31,7 @@ from src.evaluator import summarize_traces
 from src.genome import Fitness, Genome, GenomeConfig
 from src.meta_agent import llm_crossover, llm_mutate
 from src.recording import EpisodeRecorder
+from src.settings import settings
 
 console = Console()
 

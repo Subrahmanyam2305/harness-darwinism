@@ -6,9 +6,9 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from src.config import settings
 from src.genome import GenomeConfig
 from src.llm import chat
+from src.settings import settings
 
 
 class _CrossoverGenomeConfig(GenomeConfig):
