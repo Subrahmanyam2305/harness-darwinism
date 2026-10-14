@@ -21,12 +21,15 @@ def cmd_evolve(args):
     from src.evolution import run_evolution
 
     episode_count = args.population * args.seeds_per_generation * (args.generations + 1)
-    primitive_upper_bound = episode_count * args.max_steps
+    decision_upper_bound = episode_count * args.max_steps
+    retry_upper_bound = decision_upper_bound * 3
     console.print(
         "[bold]Experiment call estimate[/bold]\n"
         f"  controller: {args.controller}\n"
         f"  workers: {args.workers}\n"
-        f"  primitive upper bound: {primitive_upper_bound:,} gameplay calls"
+        f"  episodes: {episode_count:,}\n"
+        f"  decision upper bound: {decision_upper_bound:,} gameplay decisions\n"
+        f"  worst-case retry upper bound: {retry_upper_bound:,} gameplay calls"
     )
     if args.controller == "skills":
         console.print(

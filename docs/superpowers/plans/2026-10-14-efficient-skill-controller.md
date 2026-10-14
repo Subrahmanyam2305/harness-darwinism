@@ -1,6 +1,6 @@
 # Efficient Crafter Skill Controller Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a compact, guarded multi-step Crafter controller, bounded candidate concurrency, dashboard evidence, and paired controller comparison.
 
@@ -39,9 +39,9 @@
 **Interfaces:**
 - Produces: `ExecutionState`, `StatePatch`, `SkillRequest`, `SkillResult`, `CrafterSnapshot`, `feasible_skills()`, and `execute_skill()`.
 
-- [ ] Write fixture tests for snapshot extraction, affordance filtering, skill guards, tool allowlists, progress, and reset-safe state.
-- [ ] Implement typed snapshots and the bounded six-skill catalog.
-- [ ] Run `pytest tests/test_crafter_env.py tests/test_skills.py -q` and commit.
+- [x] Write fixture tests for snapshot extraction, affordance filtering, skill guards, tool allowlists, progress, and reset-safe state.
+- [x] Implement typed snapshots and the bounded six-skill catalog.
+- [x] Run `pytest tests/test_crafter_env.py tests/test_skills.py -q` and commit.
 
 ### Task 2: Skill-controlled episodes and compact prompts
 
@@ -56,9 +56,9 @@
 - Consumes: Task 1 state and skills.
 - Produces: `play_episode(..., controller="primitive"|"skills", max_skill_steps=5)` and decision/action evidence.
 
-- [ ] Add failing tests proving one model decision executes multiple real steps and compact requests omit transcript reasoning.
-- [ ] Implement controller dispatch, state patches, decision IDs, guarded local execution, usage/cache fields, and compatibility fallbacks.
-- [ ] Run focused agent, recording, and DB tests and commit.
+- [x] Add failing tests proving one model decision executes multiple real steps and compact requests omit transcript reasoning.
+- [x] Implement controller dispatch, state patches, decision IDs, guarded local execution, usage/cache fields, and compatibility fallbacks.
+- [x] Run focused agent, recording, and DB tests and commit.
 
 ### Task 3: Bounded concurrent evolution and CLI controls
 
@@ -72,9 +72,9 @@
 - Consumes: Task 2 episode controller.
 - Produces: `evaluate_population()` with stable result ordering and CLI `--controller`, `--workers`, and `--max-skill-steps`.
 
-- [ ] Add tests for forwarding controls, one-worker compatibility, stable concurrent ordering, and coordinator-only persistence.
-- [ ] Implement bounded episode concurrency and print a labeled call upper bound before execution.
-- [ ] Run focused evolution and CLI tests and commit.
+- [x] Add tests for forwarding controls, one-worker compatibility, stable concurrent ordering, and coordinator-only persistence.
+- [x] Implement bounded episode concurrency and print a labeled call upper bound before execution.
+- [x] Run focused evolution and CLI tests and commit.
 
 ### Task 4: API and dashboard evidence
 
@@ -89,9 +89,9 @@
 - Consumes: Task 2 trace documents.
 - Produces: backward-compatible run summaries with decisions and efficiency metrics.
 
-- [ ] Add API serialization tests for skill and legacy records.
-- [ ] Expose and render controller, grouped decisions, calls, steps per call, tokens per step, latency, outcomes, and interruption reasons.
-- [ ] Run API tests plus dashboard lint/build and commit.
+- [x] Add API serialization tests for skill and legacy records.
+- [x] Expose and render controller, grouped decisions, calls, steps per call, tokens per step, latency, outcomes, and interruption reasons.
+- [x] Run API tests plus dashboard lint/build and commit.
 
 ### Task 5: Paired controller evidence command
 
@@ -104,16 +104,16 @@
 **Interfaces:**
 - Produces: explicitly invoked paired primitive-versus-skills report with identical seeds and settings.
 
-- [ ] Add aggregation tests covering calls, tokens, latency, score, errors, and unavailable cost.
-- [ ] Add a comparison command that never runs during discovery or dashboard startup.
-- [ ] Run focused tests and commit.
+- [x] Add aggregation tests covering calls, tokens, latency, score, errors, and unavailable cost.
+- [x] Add a comparison command that never runs during discovery or dashboard startup.
+- [x] Run focused tests and commit.
 
 ### Task 6: Full verification and ticket handoff
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-10-14-efficient-skill-controller.md`
 
-- [ ] Run Python tests, Ruff checks, dashboard lint, and dashboard build.
-- [ ] Run an offline seeded Crafter skill-controller smoke check and inspect its replay without paid inference.
-- [ ] Verify the final diff, commit remaining changes, and move issues #10-#15 to In review.
+- [x] Run Python tests, Ruff checks, dashboard lint, and dashboard build.
+- [x] Run an offline seeded Crafter skill-controller smoke check and inspect its replay without paid inference.
+- [x] Verify the final diff, commit remaining changes, and move issues #10-#15 to In review.
 

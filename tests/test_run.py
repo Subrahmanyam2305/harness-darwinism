@@ -7,7 +7,9 @@ import run
 from src.genome import Genome
 
 
-def test_evolve_forwards_seed_profile_and_explicit_training_seeds(monkeypatch) -> None:
+def test_evolve_forwards_seed_profile_and_explicit_training_seeds(
+    monkeypatch, capsys
+) -> None:
     captured: dict = {}
 
     def fake_run_evolution(**kwargs):
@@ -37,6 +39,8 @@ def test_evolve_forwards_seed_profile_and_explicit_training_seeds(monkeypatch) -
     assert captured["controller"] == "skills"
     assert captured["workers"] == 3
     assert captured["max_skill_steps"] == 4
+    output = capsys.readouterr().out
+    assert "worst-case retry upper bound: 18,000 gameplay calls" in output
 
 
 def test_compare_controllers_uses_identical_settings(monkeypatch, tmp_path) -> None:
