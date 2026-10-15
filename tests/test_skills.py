@@ -323,16 +323,36 @@ class _WrongInventoryChangeEnv(_FakeSkillEnv):
 
 @dataclass
 class _BlockedDirectPathEnv(_FakeSkillEnv):
+    x: int = 0
+    y: int = 0
+
     def snapshot(self) -> CrafterSnapshot:
         return _snapshot(
             step=self.step_count,
             wood=self.wood,
-            position=(0, -self.step_count),
-            walkable_directions=["move_up"],
+            position=(self.x, self.y),
+            walkable_directions=["move_up", "move_down", "move_left"],
             entities=[
-                NearbyEntity(kind="tree", direction="east", distance=2, dx=2, dy=0)
+                NearbyEntity(
+                    kind="tree",
+                    direction="south-east" if self.y < 0 else "east",
+                    distance=max(abs(2 - self.x), abs(-self.y)),
+                    dx=2 - self.x,
+                    dy=-self.y,
+                )
             ],
         )
+
+    def step(self, action: str):
+        self.step_count += 1
+        dx, dy = {
+            "move_left": (-1, 0),
+            "move_up": (0, -1),
+            "move_down": (0, 1),
+        }[action]
+        self.x += dx
+        self.y += dy
+        return "detour", 0.0, False, {}
 
 
 @dataclass
@@ -439,13 +459,14 @@ def test_acquire_takes_a_walkable_detour_when_direct_path_is_blocked() -> None:
     environment = _BlockedDirectPathEnv()
 
     result = execute_skill(
-        SkillRequest(name="acquire", target="tree", max_steps=1),
+        SkillRequest(name="acquire", target="tree", max_steps=3),
         environment,
         ExecutionState(),
         allowed_actions=["move_right", "move_up", "do"],
     )
 
-    assert result.actions == ["move_up"]
+    assert result.actions == ["move_up", "move_up", "move_up"]
+    assert len({step.snapshot.position for step in result.steps}) == 3
 
 
 def test_repeated_combat_uses_achievement_count_for_success() -> None:

@@ -183,8 +183,28 @@ def _safe_moves(snapshot: CrafterSnapshot, allowed_actions: set[str]) -> list[st
     ]
 
 
+def _unvisited_moves(
+    snapshot: CrafterSnapshot,
+    moves: list[str],
+    recent_positions: list[tuple[int, int]] | None,
+) -> list[str]:
+    recent = set((recent_positions or [])[-4:])
+    return [
+        action
+        for action in moves
+        if (
+            snapshot.position[0] + MOVE_OFFSETS[action][0],
+            snapshot.position[1] + MOVE_OFFSETS[action][1],
+        )
+        not in recent
+    ]
+
+
 def _move_toward(
-    entity: NearbyEntity, snapshot: CrafterSnapshot, allowed_actions: set[str]
+    entity: NearbyEntity,
+    snapshot: CrafterSnapshot,
+    allowed_actions: set[str],
+    recent_positions: list[tuple[int, int]] | None = None,
 ) -> str | None:
     preferred: list[str] = []
     if entity.dx < 0:
@@ -198,14 +218,17 @@ def _move_toward(
     safe = _safe_moves(snapshot, allowed_actions)
     if entity.distance == 1 and len(preferred) == 1:
         return preferred[0]
+    unvisited = _unvisited_moves(snapshot, safe, recent_positions)
     for action in preferred:
-        if action in safe:
+        if action in unvisited:
             return action
-    locally_walkable = snapshot.walkable_directions
-    if locally_walkable is not None and any(
-        action in locally_walkable for action in preferred
-    ):
-        return preferred[0] if preferred else None
+    allowed_preferred = [action for action in preferred if action in allowed_actions]
+    if preferred and not allowed_preferred:
+        return preferred[0]
+    if unvisited:
+        return unvisited[0]
+    if allowed_preferred and not unvisited:
+        return allowed_preferred[0]
     return safe[0] if safe else (preferred[0] if preferred else None)
 
 
@@ -344,16 +367,7 @@ def _next_action(
         safe_moves = _safe_moves(snapshot, allowed_actions)
         if not safe_moves:
             return None
-        recent = set((recent_positions or [])[-4:])
-        unvisited = [
-            action
-            for action in safe_moves
-            if (
-                snapshot.position[0] + MOVE_OFFSETS[action][0],
-                snapshot.position[1] + MOVE_OFFSETS[action][1],
-            )
-            not in recent
-        ]
+        unvisited = _unvisited_moves(snapshot, safe_moves, recent_positions)
         choices = unvisited or safe_moves
         return choices[snapshot.step % len(choices)]
     if request.name in {"acquire", "engage"}:
@@ -364,7 +378,7 @@ def _next_action(
             return None
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
-        return _move_toward(target, snapshot, allowed_actions)
+        return _move_toward(target, snapshot, allowed_actions, recent_positions)
     if request.name == "evade":
         threat = _entity(
             snapshot,
@@ -386,21 +400,12 @@ def _next_action(
             safe_moves = _safe_moves(snapshot, allowed_actions)
             if not safe_moves:
                 return None
-            recent = set((recent_positions or [])[-4:])
-            unvisited = [
-                action
-                for action in safe_moves
-                if (
-                    snapshot.position[0] + MOVE_OFFSETS[action][0],
-                    snapshot.position[1] + MOVE_OFFSETS[action][1],
-                )
-                not in recent
-            ]
+            unvisited = _unvisited_moves(snapshot, safe_moves, recent_positions)
             choices = unvisited or safe_moves
             return choices[snapshot.step % len(choices)]
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
-        return _move_toward(target, snapshot, allowed_actions)
+        return _move_toward(target, snapshot, allowed_actions, recent_positions)
     return None
 
 
