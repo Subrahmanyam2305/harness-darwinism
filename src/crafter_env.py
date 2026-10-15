@@ -119,6 +119,7 @@ class CrafterSnapshot(BaseModel):
     step: int = Field(ge=0)
     inventory: dict[str, int]
     achievements: dict[str, bool]
+    achievement_counts: dict[str, int] = Field(default_factory=dict)
     nearby_entities: list[NearbyEntity]
     facing: str
     position: tuple[int, int] = (0, 0)
@@ -394,6 +395,10 @@ class CrafterTextEnv:
             step=self._step_count,
             inventory=inventory,
             achievements=self.get_achievements(),
+            achievement_counts={
+                key: int(value)
+                for key, value in self.info.get("achievements", {}).items()
+            },
             nearby_entities=_nearby_entities(self.info),
             facing=_direction(int(facing[1]), int(facing[0])),
             position=(int(player_pos[0]), int(player_pos[1])),

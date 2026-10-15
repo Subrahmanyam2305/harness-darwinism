@@ -47,6 +47,7 @@ class ExecutionState(BaseModel):
     )
     failed_skills: dict[str, SkillFailure] = Field(default_factory=dict, max_length=20)
     no_progress_steps: int = Field(default=0, ge=0, le=20)
+    recent_positions: list[tuple[int, int]] = Field(default_factory=list, max_length=8)
 
 
 class StatePatch(BaseModel):

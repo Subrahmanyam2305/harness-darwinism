@@ -16,6 +16,12 @@ SkillName = Literal[
 SkillStatus = Literal["succeeded", "failed", "interrupted", "exhausted", "terminal"]
 
 MOVE_ACTIONS = ["move_up", "move_right", "move_down", "move_left"]
+MOVE_OFFSETS = {
+    "move_left": (-1, 0),
+    "move_right": (1, 0),
+    "move_up": (0, -1),
+    "move_down": (0, 1),
+}
 ACQUIRE_REQUIREMENTS = {
     "tree": {},
     "stone": {"wood_pickaxe": 1},
@@ -256,10 +262,7 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
                 options.append(option)
     inventory = snapshot.inventory
     for goal, action in BUILD_ACTIONS.items():
-        achievement = f"place_{goal}" if goal in PLACEMENT_TERRAIN else f"make_{goal}"
-        already_complete = snapshot.achievements.get(achievement, False)
-        if goal not in PLACEMENT_TERRAIN:
-            already_complete = already_complete or inventory.get(goal, 0) > 0
+        already_complete = goal not in PLACEMENT_TERRAIN and inventory.get(goal, 0) > 0
         requirements_met = _has_items(inventory, BUILD_REQUIREMENTS[goal])
         workstations_met = _has_nearby(snapshot, BUILD_WORKSTATIONS.get(goal, set()))
         terrain_met = (
@@ -332,11 +335,27 @@ def assess_skill_affordances(
 
 
 def _next_action(
-    request: SkillRequest, snapshot: CrafterSnapshot, allowed_actions: set[str]
+    request: SkillRequest,
+    snapshot: CrafterSnapshot,
+    allowed_actions: set[str],
+    recent_positions: list[tuple[int, int]] | None = None,
 ) -> str | None:
     if request.name == "explore":
         safe_moves = _safe_moves(snapshot, allowed_actions)
-        return safe_moves[snapshot.step % len(safe_moves)] if safe_moves else None
+        if not safe_moves:
+            return None
+        recent = set((recent_positions or [])[-4:])
+        unvisited = [
+            action
+            for action in safe_moves
+            if (
+                snapshot.position[0] + MOVE_OFFSETS[action][0],
+                snapshot.position[1] + MOVE_OFFSETS[action][1],
+            )
+            not in recent
+        ]
+        choices = unvisited or safe_moves
+        return choices[snapshot.step % len(choices)]
     if request.name in {"acquire", "engage"}:
         if request.name == "acquire" and request.target == "grass":
             return "do" if snapshot.front_kind == "grass" else None
@@ -365,16 +384,33 @@ def _next_action(
         target = _entity(snapshot, target_kinds.get(request.need or "", set()))
         if target is None:
             safe_moves = _safe_moves(snapshot, allowed_actions)
-            return safe_moves[snapshot.step % len(safe_moves)] if safe_moves else None
+            if not safe_moves:
+                return None
+            recent = set((recent_positions or [])[-4:])
+            unvisited = [
+                action
+                for action in safe_moves
+                if (
+                    snapshot.position[0] + MOVE_OFFSETS[action][0],
+                    snapshot.position[1] + MOVE_OFFSETS[action][1],
+                )
+                not in recent
+            ]
+            choices = unvisited or safe_moves
+            return choices[snapshot.step % len(choices)]
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
         return _move_toward(target, snapshot, allowed_actions)
     return None
 
 
-def _achievement_unlocked(
+def _achievement_advanced(
     before: CrafterSnapshot, after: CrafterSnapshot, achievement: str
 ) -> bool:
+    if before.achievement_counts or after.achievement_counts:
+        return after.achievement_counts.get(
+            achievement, 0
+        ) > before.achievement_counts.get(achievement, 0)
     return not before.achievements.get(achievement, False) and after.achievements.get(
         achievement, False
     )
@@ -394,7 +430,7 @@ def _acquire_succeeded(
     achievement = ACQUIRE_ACHIEVEMENTS[target]
     return after.inventory.get(item, 0) > before.inventory.get(
         item, 0
-    ) or _achievement_unlocked(before, after, achievement)
+    ) or _achievement_advanced(before, after, achievement)
 
 
 def _build_succeeded(
@@ -403,7 +439,7 @@ def _build_succeeded(
     if goal not in BUILD_ACTIONS:
         return False
     achievement = f"place_{goal}" if goal in PLACEMENT_TERRAIN else f"make_{goal}"
-    if _achievement_unlocked(before, after, achievement):
+    if _achievement_advanced(before, after, achievement):
         return True
     return goal not in PLACEMENT_TERRAIN and after.inventory.get(
         goal, 0
@@ -421,7 +457,7 @@ def _made_progress(
         return True
     if request.name == "engage":
         achievement = f"defeat_{request.target}"
-        if _achievement_unlocked(before, after, achievement):
+        if _achievement_advanced(before, after, achievement):
             return True
     if request.name == "recover" and after.inventory.get(
         request.need or "", 0
@@ -451,6 +487,8 @@ def execute_skill(
     steps: list[SkillStep] = []
     guard_checks: list[GuardCheck] = []
     runtime_state = state.model_copy(deep=True)
+    if not runtime_state.recent_positions:
+        runtime_state.recent_positions.append(before.position)
     reason = "local_step_budget_exhausted"
     status: SkillStatus = "exhausted"
 
@@ -492,7 +530,12 @@ def execute_skill(
         if not threat_safe:
             status, reason = "interrupted", "nearby_threat"
             break
-        action = _next_action(request, snapshot, set(allowed_actions))
+        action = _next_action(
+            request,
+            snapshot,
+            set(allowed_actions),
+            runtime_state.recent_positions,
+        )
         guard_checks.append(
             GuardCheck(
                 step=snapshot.step,
@@ -529,6 +572,10 @@ def execute_skill(
         steps.append(skill_step)
         if on_step:
             on_step(skill_step)
+        if after.position != snapshot.position:
+            runtime_state.recent_positions = (
+                runtime_state.recent_positions + [after.position]
+            )[-8:]
         runtime_state.no_progress_steps = (
             0
             if _made_progress(request, snapshot, after)
@@ -542,7 +589,7 @@ def execute_skill(
         ):
             status, reason = "succeeded", "target_acquired"
             break
-        if request.name == "engage" and _achievement_unlocked(
+        if request.name == "engage" and _achievement_advanced(
             before, after, f"defeat_{request.target}"
         ):
             status, reason = "succeeded", "target_defeated"

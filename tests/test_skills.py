@@ -48,6 +48,7 @@ def _snapshot(
     walkable_directions: list[str] | None = None,
     position: tuple[int, int] = (0, 0),
     achievements: dict[str, bool] | None = None,
+    achievement_counts: dict[str, int] | None = None,
 ) -> CrafterSnapshot:
     items = {
         "health": health,
@@ -61,6 +62,7 @@ def _snapshot(
         step=step,
         inventory=items,
         achievements=achievements or {},
+        achievement_counts=achievement_counts or {},
         nearby_entities=entities or [],
         facing=facing,
         front_kind=front_kind,
@@ -186,6 +188,18 @@ def test_affordances_do_not_offer_a_tool_already_owned() -> None:
     options = feasible_skills(snapshot, ["make_wood_sword"])
 
     assert "build_or_craft:wood_sword" not in options
+
+
+def test_affordances_allow_rebuilding_completed_workstation_achievements() -> None:
+    snapshot = _snapshot(
+        inventory={"wood": 2, "stone": 4},
+        achievements={"place_table": True, "place_furnace": True},
+    )
+
+    options = feasible_skills(snapshot, ["place_table", "place_furnace"])
+
+    assert "build_or_craft:table" in options
+    assert "build_or_craft:furnace" in options
 
 
 def test_affordances_match_runtime_safety_guards() -> None:
@@ -321,6 +335,56 @@ class _BlockedDirectPathEnv(_FakeSkillEnv):
         )
 
 
+@dataclass
+class _RepeatedCombatEnv(_FakeSkillEnv):
+    defeated: bool = False
+
+    def snapshot(self) -> CrafterSnapshot:
+        return _snapshot(
+            step=self.step_count,
+            achievements={"defeat_zombie": True},
+            achievement_counts={"defeat_zombie": 2 if self.defeated else 1},
+            entities=(
+                []
+                if self.defeated
+                else [
+                    NearbyEntity(
+                        kind="zombie", direction="east", distance=1, dx=1, dy=0
+                    )
+                ]
+            ),
+        )
+
+    def step(self, action: str):
+        self.step_count += 1
+        self.defeated = action == "do"
+        return "combat", 0.0, False, {}
+
+
+@dataclass
+class _OpenExploreEnv(_FakeSkillEnv):
+    x: int = 0
+    y: int = 0
+
+    def snapshot(self) -> CrafterSnapshot:
+        return _snapshot(
+            step=self.step_count,
+            position=(self.x, self.y),
+        )
+
+    def step(self, action: str):
+        self.step_count += 1
+        dx, dy = {
+            "move_left": (-1, 0),
+            "move_right": (1, 0),
+            "move_up": (0, -1),
+            "move_down": (0, 1),
+        }[action]
+        self.x += dx
+        self.y += dy
+        return "moved", 0.0, False, {}
+
+
 def test_acquire_skill_executes_multiple_local_steps_until_inventory_increases() -> (
     None
 ):
@@ -382,6 +446,35 @@ def test_acquire_takes_a_walkable_detour_when_direct_path_is_blocked() -> None:
     )
 
     assert result.actions == ["move_up"]
+
+
+def test_repeated_combat_uses_achievement_count_for_success() -> None:
+    environment = _RepeatedCombatEnv()
+
+    result = execute_skill(
+        SkillRequest(name="engage", target="zombie", max_steps=2),
+        environment,
+        ExecutionState(),
+        allowed_actions=["do"],
+    )
+
+    assert result.status == "succeeded"
+    assert result.reason == "target_defeated"
+    assert result.actions == ["do"]
+
+
+def test_explore_avoids_returning_to_a_recent_position_when_an_option_exists() -> None:
+    environment = _OpenExploreEnv()
+
+    result = execute_skill(
+        SkillRequest(name="explore", max_steps=5),
+        environment,
+        ExecutionState(),
+        allowed_actions=["move_up", "move_right", "move_down", "move_left"],
+    )
+
+    positions = [step.snapshot.position for step in result.steps]
+    assert len(positions) == len(set(positions))
 
 
 def test_skill_stops_before_disallowed_local_action() -> None:
