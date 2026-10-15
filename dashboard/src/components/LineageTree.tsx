@@ -87,14 +87,23 @@ export function LineageTree({ data, onSelectGenome }: Props) {
   }
 
   return (
-    <div className="panel" style={{ height: 500 }}>
-      <h2>🌳 Lineage Tree</h2>
-      <div style={{ height: "calc(100% - 40px)" }}>
+    <div className="panel lineage-panel">
+      <div className="lineage-heading">
+        <div>
+          <span>Evolution map</span>
+          <h2>🌳 Lineage Tree</h2>
+        </div>
+        <p>{data.nodes.length} candidates · click a candidate to inspect its run</p>
+      </div>
+      <div className="lineage-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodeClick={onNodeClick}
           fitView
+          fitViewOptions={{ padding: 0.08 }}
+          minZoom={0.08}
+          maxZoom={2}
         >
           <Background color="#333" gap={20} />
           <Controls />
