@@ -212,13 +212,6 @@ export function GameReplay({ runs, genomeId }: Props) {
       {selectedRun && (
         <>
         <div className="run-evidence-label">
-          <strong>
-            {selectedRun.is_stub === true
-              ? "OFFLINE STUB"
-              : selectedRun.is_stub === false
-                ? "LIVE LLM"
-                : "EVIDENCE TYPE UNAVAILABLE"}
-          </strong>
           {selectedRun.comparison_id && <span>Paired experiment: {selectedRun.comparison_id}</span>}
           <span>Seed {selectedRun.paired_seed ?? selectedRun.seed}</span>
         </div>

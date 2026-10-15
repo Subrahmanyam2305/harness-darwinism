@@ -571,8 +571,6 @@ main {
   font-size: 11px;
 }
 
-.run-evidence-label strong { color: var(--green); }
-
 .efficiency-strip > div {
   display: flex;
   flex-direction: column;
