@@ -35,6 +35,25 @@ def test_crossover_retries_invalid_response_and_records_recovery(monkeypatch) ->
     assert "no JSON object found" in prompts[1]
 
 
+def test_crossover_accepts_one_json_code_fence(monkeypatch) -> None:
+    response = json.dumps(
+        {
+            "config": GenomeConfig(
+                rules=["Keep food available", "Collect wood", "Craft tools"]
+            ).model_dump(),
+            "crossover_note": "Combined survival and crafting rules.",
+        }
+    )
+    monkeypatch.setattr(
+        "src.meta_agent.chat", lambda **kwargs: f"```json\n{response}\n```"
+    )
+
+    child, note = llm_crossover(GenomeConfig(), GenomeConfig())
+
+    assert child.rules == ["Keep food available", "Collect wood", "Craft tools"]
+    assert note == "Combined survival and crafting rules."
+
+
 def test_crossover_rejects_prose_wrapped_json(monkeypatch) -> None:
     valid = json.dumps(
         {
@@ -126,6 +145,25 @@ def test_failed_mutation_identifies_the_retained_crossover_configuration(
 
     assert child == crossover
     assert note == "mutation failed — kept crossover configuration"
+
+
+def test_mutation_accepts_one_json_code_fence(monkeypatch) -> None:
+    crossover = GenomeConfig(rules=["Collect wood", "Craft tools"])
+    mutated = GenomeConfig(rules=["Collect wood", "Craft tools", "Find food"])
+    response = json.dumps(
+        {
+            "config": mutated.model_dump(),
+            "mutation_note": "Added a food rule.",
+        }
+    )
+    monkeypatch.setattr(
+        "src.meta_agent.chat", lambda **kwargs: f"```json\n{response}\n```"
+    )
+
+    child, note = llm_mutate(crossover, [])
+
+    assert child == mutated
+    assert note == "Added a food rule."
 
 
 def test_noop_mutation_is_rejected_as_failed(monkeypatch) -> None:

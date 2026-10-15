@@ -21,6 +21,7 @@ from src.skills import (
     assess_skill_affordances,
     execute_skill,
 )
+from src.structured_output import unwrap_json_code_fence
 
 TerminationReason = Literal["death", "step_limit", "agent_error"]
 ControllerMode = Literal["primitive", "skills"]
@@ -152,7 +153,7 @@ def _build_skill_system_prompt(genome: Genome) -> str:
 def _parse_action(response: str, allowed_actions: list[str]) -> str:
     """Return one allowlisted action or reject the entire model response."""
     try:
-        decision = _Decision.model_validate_json(response)
+        decision = _Decision.model_validate_json(unwrap_json_code_fence(response))
     except ValidationError as error:
         raise ValueError("Expected exactly one JSON action object") from error
     if decision.action not in allowed_actions:
@@ -188,11 +189,15 @@ def _skill_option(request: SkillRequest) -> str:
 
 def _parse_skill_decision(response: str, feasible: list[str]) -> _SkillDecision:
     try:
-        decision = _SkillDecision.model_validate_json(response)
+        decision = _SkillDecision.model_validate_json(unwrap_json_code_fence(response))
     except ValidationError as error:
         raise ValueError("Expected one JSON state patch and skill request") from error
-    if _skill_option(decision.skill) not in feasible:
-        raise ValueError("Skill request is not feasible in the current Crafter state")
+    selected = _skill_option(decision.skill)
+    if selected not in feasible:
+        raise ValueError(
+            f"Skill request {selected} is not feasible; choose exactly one of: "
+            f"{', '.join(feasible)}"
+        )
     return decision
 
 
@@ -256,6 +261,7 @@ def _play_skill_episode(
         parsed: _SkillDecision | None = None
         decision_id = f"decision-{len(decisions) + 1}"
         decision_attempts: list[dict] = []
+        validation_failure = ""
 
         for attempt_number in range(1, 4):
             attempt = {
@@ -295,8 +301,10 @@ def _play_skill_episode(
                 )
                 try:
                     parsed = _parse_skill_decision(reply.text, feasible)
-                except ValueError:
+                except ValueError as error:
                     attempt["error"] = "invalid_output"
+                    validation_failure = str(error)
+                    attempt["validation_error"] = validation_failure
                 else:
                     attempt["skill"] = parsed.skill.model_dump()
             attempts.append(attempt)
@@ -313,7 +321,11 @@ def _play_skill_episode(
                 user_message,
                 {
                     "role": "user",
-                    "content": "The prior response failed validation. Return only JSON using one supplied feasible skill.",
+                    "content": (
+                        f"The prior response failed validation: {validation_failure}. "
+                        "Return only raw JSON and choose exactly one supplied feasible "
+                        f"skill: {', '.join(feasible)}."
+                    ),
                 },
             ]
 

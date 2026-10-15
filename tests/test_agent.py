@@ -170,6 +170,68 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
     assert {frame.decision_id for frame in frames[1:]} == {"decision-1"}
 
 
+def test_skill_controller_accepts_one_json_code_fence(monkeypatch) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    provider = FakeProvider(
+        [
+            """```json
+{"state_patch":{"goal":"collect wood"},"skill":{"name":"acquire","target":"tree","max_steps":2}}
+```"""
+        ]
+    )
+
+    trace = play_episode(
+        Genome(id="fenced-skill", genome=GenomeConfig(tools=["move_right", "do"])),
+        seed=42,
+        max_steps=2,
+        provider=provider,
+        controller="skills",
+    )
+
+    assert trace.termination_reason != "agent_error"
+    assert trace.steps == 2
+    assert trace.model_calls == 1
+
+
+def test_skill_retry_reports_exact_infeasible_option(monkeypatch) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    captured: list[list[dict[str, str]]] = []
+
+    class CapturingProvider(FakeProvider):
+        def complete(self, messages):
+            captured.append(messages)
+            return super().complete(messages)
+
+    provider = CapturingProvider(
+        [
+            (
+                '{"state_patch":{"goal":"explore"},'
+                '"skill":{"name":"explore","target":"north","max_steps":1}}'
+            ),
+            (
+                '{"state_patch":{"goal":"explore"},'
+                '"skill":{"name":"explore","max_steps":1}}'
+            ),
+        ]
+    )
+
+    trace = play_episode(
+        Genome(id="retry-skill", genome=GenomeConfig(tools=["move_right", "do"])),
+        seed=42,
+        max_steps=1,
+        provider=provider,
+        controller="skills",
+    )
+
+    assert trace.termination_reason != "agent_error"
+    assert trace.attempts[0]["validation_error"] == (
+        "Skill request explore:north is not feasible; choose exactly one of: "
+        "explore, acquire:tree"
+    )
+    assert "explore:north is not feasible" in captured[1][-1]["content"]
+    assert "explore, acquire:tree" in captured[1][-1]["content"]
+
+
 def test_skill_controller_rejects_unknown_nested_state_fields(monkeypatch) -> None:
     monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
     response = (

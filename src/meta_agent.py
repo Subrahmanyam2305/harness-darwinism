@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.genome import GenomeConfig
 from src.llm import chat
 from src.settings import settings
+from src.structured_output import unwrap_json_code_fence
 
 
 class _CrossoverGenomeConfig(GenomeConfig):
@@ -94,7 +95,7 @@ Respond with ONLY one JSON object matching this JSON Schema:
             temperature=0.7,
         )
         try:
-            output = _CrossoverOutput.model_validate_json(resp)
+            output = _CrossoverOutput.model_validate_json(unwrap_json_code_fence(resp))
         except ValidationError as error:
             failures.append(_validation_summary(error))
             continue
@@ -159,7 +160,7 @@ Respond with ONLY one JSON object matching this JSON Schema:
     )
 
     try:
-        output = _MutationOutput.model_validate_json(resp)
+        output = _MutationOutput.model_validate_json(unwrap_json_code_fence(resp))
     except ValidationError:
         return genome, "mutation failed — kept crossover configuration"
 
