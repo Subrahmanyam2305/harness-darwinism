@@ -21,6 +21,20 @@ function stateValue(value: string | number | null | undefined) {
   return value == null || value === "" ? "—" : String(value);
 }
 
+function recordSize(value: Record<string, unknown> | undefined) {
+  return value ? Object.keys(value).length : 0;
+}
+
+function observationPreview(value: string | undefined) {
+  if (!value) return "Observation unavailable";
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("##") && !line.startsWith("[Step"))
+    .slice(0, 5)
+    .join(" · ");
+}
+
 export function GameReplay({ runs, genomeId }: Props) {
   const [selectedRun, setSelectedRun] = useState<RunSummary | null>(
     pickDefaultRun(runs)
@@ -90,6 +104,64 @@ export function GameReplay({ runs, genomeId }: Props) {
   const currentGuards = currentDecision?.guard_checks?.filter(
     (check) => step?.step == null || check.step === step.step - 1
   );
+  const skillParameter = currentDecision
+    ? currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need
+    : null;
+  const selectedSkill = currentDecision
+    ? `${currentDecision.skill.name}${skillParameter ? `: ${skillParameter}` : ""}`
+    : "No skill selected";
+  const availableAffordances = currentDecision?.affordances?.filter((item) => item.feasible) ?? [];
+  const blockedAffordances = currentDecision?.affordances?.filter((item) => !item.feasible) ?? [];
+  const stateRows = currentDecision
+    ? [
+        {
+          label: "Phase",
+          before: stateValue(currentDecision.state_before?.phase),
+          patch: stateValue(currentDecision.state_patch?.phase),
+          after: stateValue(currentDecision.state_after?.phase),
+        },
+        {
+          label: "Goal",
+          before: stateValue(currentDecision.state_before?.goal),
+          patch: stateValue(currentDecision.state_patch?.goal),
+          after: stateValue(currentDecision.state_after?.goal),
+        },
+        {
+          label: "Subgoal",
+          before: stateValue(currentDecision.state_before?.subgoal),
+          patch: stateValue(currentDecision.state_patch?.subgoal),
+          after: stateValue(currentDecision.state_after?.subgoal),
+        },
+        {
+          label: "No progress",
+          before: stateValue(currentDecision.state_before?.no_progress_steps),
+          patch: stateValue(currentDecision.state_patch?.no_progress_steps),
+          after: stateValue(currentDecision.state_after?.no_progress_steps),
+        },
+        {
+          label: "Known locations",
+          before: String(recordSize(currentDecision.state_before?.known_locations)),
+          patch: currentDecision.state_patch?.known_locations
+            ? String(recordSize(currentDecision.state_patch.known_locations))
+            : "—",
+          after: String(recordSize(currentDecision.state_after?.known_locations)),
+        },
+        {
+          label: "Failed skills",
+          before: String(recordSize(currentDecision.state_before?.failed_skills)),
+          patch: currentDecision.state_patch?.failed_skills
+            ? String(recordSize(currentDecision.state_patch.failed_skills))
+            : "—",
+          after: String(recordSize(currentDecision.state_after?.failed_skills)),
+        },
+        {
+          label: "Recent positions",
+          before: String(currentDecision.state_before?.recent_positions?.length ?? 0),
+          patch: "—",
+          after: String(currentDecision.state_after?.recent_positions?.length ?? 0),
+        },
+      ]
+    : [];
 
   if (!runs.length) return null;
 
@@ -286,84 +358,127 @@ export function GameReplay({ runs, genomeId }: Props) {
         <section className="controller-evidence" aria-label="Skill controller evidence">
           <div className="evidence-heading">
             <div>
-              <span>Decision evidence</span>
+              <span>Controller trace</span>
               <h3>{currentDecision?.decision_id ?? "No linked decision"}</h3>
             </div>
-            <p>Skill State lives for one episode and each decision snapshot is persisted in the Atlas run trace.</p>
+            {currentDecision && (
+              <div className="evidence-summary">
+                <span className={`status-pill ${currentDecision.status}`}>{currentDecision.status}</span>
+                <strong>{selectedSkill}</strong>
+                <small>Steps {currentDecision.step_started ?? "—"}–{currentDecision.step_ended ?? "—"} · persisted in Atlas</small>
+              </div>
+            )}
           </div>
 
           {currentDecision ? (
             <>
-              <div className="state-flow">
-                {[
-                  ["Before", currentDecision.state_before],
-                  ["Model patch", currentDecision.state_patch],
-                  ["Persisted after", currentDecision.state_after],
-                ].map(([label, state]) => {
-                  const value = state as typeof currentDecision.state_before;
-                  return (
-                    <div className="state-card" key={label as string}>
-                      <strong>{label as string}</strong>
-                      <dl>
-                        <div><dt>Phase</dt><dd>{stateValue(value?.phase)}</dd></div>
-                        <div><dt>Goal</dt><dd>{stateValue(value?.goal)}</dd></div>
-                        <div><dt>Subgoal</dt><dd>{stateValue(value?.subgoal)}</dd></div>
-                        <div><dt>No progress</dt><dd>{stateValue(value?.no_progress_steps)}</dd></div>
-                        <div><dt>Known locations</dt><dd>{value?.known_locations ? Object.keys(value.known_locations).length : "—"}</dd></div>
-                        <div><dt>Failed skills</dt><dd>{value?.failed_skills ? Object.keys(value.failed_skills).length : "—"}</dd></div>
-                      </dl>
+              <div className="state-transition-card">
+                <div className="section-heading">
+                  <div>
+                    <span className="evidence-kicker">Skill state</span>
+                    <h3>What changed in this decision</h3>
+                  </div>
+                  <p>Only the model patch is writable. Runtime counters are maintained locally.</p>
+                </div>
+                <div className="state-table" role="table" aria-label="Skill state transition">
+                  <div className="state-table-row state-table-head" role="row">
+                    <span role="columnheader">Field</span>
+                    <span role="columnheader">Before</span>
+                    <span role="columnheader">Model patch</span>
+                    <span role="columnheader">Persisted after</span>
+                  </div>
+                  {stateRows.map((row) => (
+                    <div className="state-table-row" role="row" key={row.label}>
+                      <strong role="cell">{row.label}</strong>
+                      <span role="cell">{row.before}</span>
+                      <span className={row.patch !== "—" ? "patched" : "muted"} role="cell">{row.patch}</span>
+                      <span className={row.before !== row.after ? "changed" : ""} role="cell">{row.after}</span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
 
               <div className="controller-grid">
                 <div className="evidence-card">
-                  <div className="evidence-title">
-                    <span className="evidence-kicker">SayCan-inspired</span>
-                    <h3>Local affordance gate</h3>
-                  </div>
-                  <div className="affordance-list">
-                    {currentDecision.affordances?.map((item) => (
-                      <div className={`affordance-row ${item.feasible ? "feasible" : "blocked"}`} key={`${item.option}-${item.reason}`}>
-                        <span>{item.feasible ? "✓" : "×"}</span>
-                        <strong>{item.option}</strong>
-                        <small>{item.reason.replaceAll("_", " ")}</small>
-                      </div>
-                    )) ?? <p className="evidence-unavailable">Unavailable for this recorded run.</p>}
-                  </div>
-                </div>
-
-                <div className="evidence-card">
-                  <div className="evidence-title">
-                    <span className="evidence-kicker">ReAct-inspired</span>
-                    <h3>Act, observe, replan</h3>
-                  </div>
-                  <div className="react-cycle">
-                    <div><span>Observe</span><p>{currentDecision.observation_before ?? "Unavailable"}</p></div>
-                    <div><span>Select</span><p>{currentDecision.skill.name}{currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need ? `: ${currentDecision.skill.target ?? currentDecision.skill.goal ?? currentDecision.skill.need}` : ""}</p></div>
+                  <div className="section-heading compact">
                     <div>
-                      <span>Act locally</span>
-                      <div className="action-sequence">
-                        {currentDecision.actions.map((action, index) => (
-                          <code className={index === currentActionIndex ? "current" : ""} key={`${action}-${index}`}>{action}</code>
+                      <span className="evidence-kicker">SayCan gate</span>
+                      <h3>Why this skill was selectable</h3>
+                    </div>
+                    <span className="count-badge">{availableAffordances.length} available</span>
+                  </div>
+                  {currentDecision.affordances ? (
+                    <div className="affordance-groups">
+                      <div className="affordance-group">
+                        <span className="group-label available">Available</span>
+                        {availableAffordances.map((item) => (
+                          <div className="affordance-row feasible" key={`${item.option}-${item.reason}`}>
+                            <span>✓</span>
+                            <strong>{item.option}</strong>
+                            <small>{item.reason.replaceAll("_", " ")}</small>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="affordance-group blocked-group">
+                        <span className="group-label">Blocked · {blockedAffordances.length}</span>
+                        {blockedAffordances.map((item) => (
+                          <div className="affordance-row blocked" key={`${item.option}-${item.reason}`}>
+                            <span>×</span>
+                            <strong>{item.option}</strong>
+                            <small>{item.reason.replaceAll("_", " ")}</small>
+                          </div>
                         ))}
                       </div>
                     </div>
-                    <div><span>Outcome</span><p>{currentDecision.status}: {currentDecision.reason ?? "reason unavailable"}</p></div>
-                    <div><span>Latest observation</span><p>{currentDecision.observation_after ?? "Unavailable"}</p></div>
-                  </div>
+                  ) : <p className="evidence-unavailable">Unavailable for this recorded run.</p>}
                 </div>
-              </div>
 
-              <div className="guard-strip">
-                <strong>Local checks before this action</strong>
-                <div>
-                  {(currentGuards?.length ? currentGuards : currentDecision.guard_checks)?.map((check, index) => (
-                    <span className={check.passed ? "passed" : "failed"} key={`${check.step}-${check.check}-${index}`}>
-                      {check.passed ? "✓" : "×"} {check.check.replaceAll("_", " ")} · {check.detail}
-                    </span>
-                  )) ?? <em>Unavailable for this recorded run.</em>}
+                <div className="evidence-card">
+                  <div className="section-heading compact">
+                    <div>
+                      <span className="evidence-kicker">Execution loop</span>
+                      <h3>Observe → select → act → verify</h3>
+                    </div>
+                  </div>
+                  <ol className="execution-trace">
+                    <li>
+                      <span className="trace-index">1</span>
+                      <div><strong>Observe</strong><p>{observationPreview(currentDecision.observation_before)}</p></div>
+                    </li>
+                    <li>
+                      <span className="trace-index">2</span>
+                      <div><strong>Select</strong><code className="selected-skill">{selectedSkill}</code></div>
+                    </li>
+                    <li>
+                      <span className="trace-index">3</span>
+                      <div>
+                        <strong>Act locally</strong>
+                        <div className="action-sequence">
+                        {currentDecision.actions.map((action, index) => (
+                          <code className={index === currentActionIndex ? "current" : ""} key={`${action}-${index}`}>{action}</code>
+                        ))}
+                        </div>
+                      </div>
+                    </li>
+                    <li>
+                      <span className="trace-index">4</span>
+                      <div className="trace-outcome">
+                        <strong>Verify</strong>
+                        <p><b>{currentDecision.status}</b> · {currentDecision.reason?.replaceAll("_", " ") ?? "reason unavailable"}</p>
+                        <div className="guard-list">
+                          {(currentGuards?.length ? currentGuards : currentDecision.guard_checks)?.map((check, index) => (
+                            <span className={check.passed ? "passed" : "failed"} key={`${check.step}-${check.check}-${index}`}>
+                              {check.passed ? "✓" : "×"} {check.check.replaceAll("_", " ")} · {check.detail}
+                            </span>
+                          )) ?? <em>Checks unavailable.</em>}
+                        </div>
+                      </div>
+                    </li>
+                  </ol>
+                  <details className="raw-observation">
+                    <summary>View observation after execution</summary>
+                    <pre>{currentDecision.observation_after ?? "Unavailable"}</pre>
+                  </details>
                 </div>
               </div>
             </>

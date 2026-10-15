@@ -90,6 +90,7 @@ export interface ExecutionState {
   known_locations: Record<string, unknown>;
   failed_skills: Record<string, unknown>;
   no_progress_steps: number;
+  recent_positions?: [number, number][];
 }
 
 export interface SkillAffordance {
