@@ -134,7 +134,7 @@ def test_skill_controller_executes_multiple_steps_from_one_model_decision(
         [
             (
                 '{"state_patch":{"goal":"collect wood","subgoal":"reach tree"},'
-                '"skill":{"name":"acquire","target":"tree","max_steps":4}}'
+                '"skill_option":"acquire:tree"}'
             )
         ]
     )
@@ -175,7 +175,7 @@ def test_skill_controller_accepts_one_json_code_fence(monkeypatch) -> None:
     provider = FakeProvider(
         [
             """```json
-{"state_patch":{"goal":"collect wood"},"skill":{"name":"acquire","target":"tree","max_steps":2}}
+{"state_patch":{"goal":"collect wood"},"skill_option":"acquire:tree"}
 ```"""
         ]
     )
@@ -204,14 +204,8 @@ def test_skill_retry_reports_exact_infeasible_option(monkeypatch) -> None:
 
     provider = CapturingProvider(
         [
-            (
-                '{"state_patch":{"goal":"explore"},'
-                '"skill":{"name":"explore","target":"north","max_steps":1}}'
-            ),
-            (
-                '{"state_patch":{"goal":"explore"},'
-                '"skill":{"name":"explore","max_steps":1}}'
-            ),
+            ('{"state_patch":{"goal":"explore"},"skill_option":"explore:north"}'),
+            ('{"state_patch":{"goal":"explore"},"skill_option":"explore"}'),
         ]
     )
 
@@ -225,20 +219,16 @@ def test_skill_retry_reports_exact_infeasible_option(monkeypatch) -> None:
 
     assert trace.termination_reason != "agent_error"
     assert trace.attempts[0]["validation_error"] == (
-        "Skill request explore:north is not feasible; choose exactly one of: "
+        "Skill option explore:north is not feasible; choose exactly one of: "
         "explore, acquire:tree"
     )
     assert "explore:north is not feasible" in captured[1][-1]["content"]
     assert "explore, acquire:tree" in captured[1][-1]["content"]
 
 
-def test_skill_controller_rejects_unknown_nested_state_fields(monkeypatch) -> None:
+def test_skill_controller_rejects_unknown_state_patch_fields(monkeypatch) -> None:
     monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
-    response = (
-        '{"state_patch":{"known_locations":{"tree":{"direction":"east",'
-        '"estimated_distance":2,"last_seen_step":0,"unrecognized":true}}},'
-        '"skill":{"name":"explore","max_steps":1}}'
-    )
+    response = '{"state_patch":{"unrecognized":true},"skill_option":"explore"}'
     provider = FakeProvider([response, response, response])
 
     trace = play_episode(
@@ -265,13 +255,10 @@ def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -
 
     provider = CapturingProvider(
         [
-            (
-                '{"state_patch":{"goal":"explore"},'
-                '"skill":{"name":"explore","max_steps":1}}'
-            ),
+            ('{"state_patch":{"goal":"explore"},"skill_option":"explore"}'),
             (
                 '{"state_patch":{"subgoal":"collect tree"},'
-                '"skill":{"name":"acquire","target":"tree","max_steps":1}}'
+                '"skill_option":"acquire:tree"}'
             ),
         ]
     )
@@ -291,6 +278,32 @@ def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -
     assert "thought" not in captured[1][0]["content"].lower()
     assert "Execution state" in captured[1][1]["content"]
     assert [message["role"] for message in captured[1]] == ["system", "user"]
+
+
+def test_skill_controller_discards_echoed_read_only_state_fields(monkeypatch) -> None:
+    monkeypatch.setattr("src.agent.CrafterTextEnv", FakeSkillEnvironment)
+    provider = FakeProvider(
+        [
+            (
+                '{"state_patch":{"goal":"collect wood",'
+                '"known_locations":{"stone":{"distance":3}},'
+                '"failed_skills":{},"no_progress_steps":0},'
+                '"skill_option":"acquire:tree"}'
+            ),
+        ]
+    )
+
+    trace = play_episode(
+        Genome(id="read-only-patch", genome=GenomeConfig(tools=["move_right", "do"])),
+        seed=42,
+        max_steps=2,
+        provider=provider,
+        controller="skills",
+    )
+
+    assert trace.termination_reason != "agent_error"
+    assert trace.model_calls == 1
+    assert trace.decisions[0]["state_patch"] == {"goal": "collect wood"}
 
 
 def test_retryable_provider_failure_uses_bounded_backoff(monkeypatch) -> None:

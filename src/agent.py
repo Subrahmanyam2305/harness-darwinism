@@ -9,10 +9,15 @@ from time import sleep
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.crafter_env import ACTIONS, CrafterTextEnv
-from src.execution_state import ExecutionState, StatePatch, apply_state_patch
+from src.execution_state import (
+    ExecutionState,
+    ProgressPhase,
+    StatePatch,
+    apply_state_patch,
+)
 from src.gameplay_provider import BedrockProvider, GameplayProvider, ProviderError
 from src.genome import Genome
 from src.skills import (
@@ -85,11 +90,28 @@ class _Decision(BaseModel):
     thought: str = ""
 
 
+class _SkillStatePatch(BaseModel):
+    """Model-proposed state plus explicitly tolerated read-only echoes."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    phase: ProgressPhase | None = None
+    goal: str | None = Field(default=None, max_length=160)
+    subgoal: str | None = Field(default=None, max_length=160)
+    known_locations: object | None = Field(default=None, exclude=True)
+    failed_skills: object | None = Field(default=None, exclude=True)
+    no_progress_steps: object | None = Field(default=None, exclude=True)
+
+    def writable_patch(self) -> StatePatch:
+        """Return only fields the model is allowed to change."""
+        return StatePatch.model_validate(self.model_dump(exclude_none=True))
+
+
 class _SkillDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    state_patch: StatePatch = StatePatch()
-    skill: SkillRequest
+    state_patch: _SkillStatePatch = _SkillStatePatch()
+    skill_option: str = Field(min_length=1, max_length=80)
 
 
 def _build_system_prompt(genome: Genome) -> str:
@@ -143,8 +165,13 @@ def _build_skill_system_prompt(genome: Genome) -> str:
         [
             "",
             "## Response Format",
-            "Return only JSON with state_patch and skill. Example:",
-            '{"state_patch":{"goal":"collect wood","subgoal":"reach tree"},"skill":{"name":"acquire","target":"tree","max_steps":3}}',
+            "Choose skill_option by copying one supplied feasible skill exactly.",
+            (
+                "state_patch may contain only phase, goal, and subgoal. "
+                "Known locations and runtime failure counters are read-only."
+            ),
+            "Return only JSON with state_patch and skill_option. Example:",
+            '{"state_patch":{"goal":"collect wood","subgoal":"reach tree"},"skill_option":"acquire:tree"}',
         ]
     )
     return "\n".join(parts)
@@ -182,20 +209,36 @@ def _sum_if_complete(attempts: list[dict], key: str) -> int | float | None:
     return sum(values)
 
 
-def _skill_option(request: SkillRequest) -> str:
-    parameter = request.target or request.goal or request.need
-    return f"{request.name}:{parameter}" if parameter else request.name
+def _validation_summary(error: ValidationError) -> str:
+    """Return the first Pydantic failure with its exact response path."""
+    first = error.errors(include_url=False)[0]
+    location = ".".join(str(item) for item in first["loc"]) or "response"
+    return f"Invalid response at {location}: {first['msg']}"
+
+
+def _skill_request(option: str, max_steps: int) -> SkillRequest:
+    """Convert one locally validated affordance option into a typed request."""
+    name, separator, parameter = option.partition(":")
+    values: dict[str, object] = {"name": name, "max_steps": max_steps}
+    if separator:
+        if name in {"acquire", "evade", "engage"}:
+            values["target"] = parameter
+        elif name == "build_or_craft":
+            values["goal"] = parameter
+        elif name == "recover":
+            values["need"] = parameter
+    return SkillRequest.model_validate(values)
 
 
 def _parse_skill_decision(response: str, feasible: list[str]) -> _SkillDecision:
     try:
         decision = _SkillDecision.model_validate_json(unwrap_json_code_fence(response))
     except ValidationError as error:
-        raise ValueError("Expected one JSON state patch and skill request") from error
-    selected = _skill_option(decision.skill)
-    if selected not in feasible:
+        raise ValueError(_validation_summary(error)) from error
+    if decision.skill_option not in feasible:
         raise ValueError(
-            f"Skill request {selected} is not feasible; choose exactly one of: "
+            f"Skill option {decision.skill_option} is not feasible; "
+            "choose exactly one of: "
             f"{', '.join(feasible)}"
         )
     return decision
@@ -251,10 +294,16 @@ def _play_skill_episode(
         user_message = {
             "role": "user",
             "content": (
-                f"Execution state:\n{state.model_dump_json()}\n\n"
+                "Execution state (writable fields):\n"
+                f"{state.model_dump_json(include={'phase', 'goal', 'subgoal'})}\n\n"
+                "Read-only runtime feedback:\n"
+                f"known_locations={state.known_locations}, "
+                f"failed_skills={state.failed_skills}, "
+                f"no_progress_steps={state.no_progress_steps}\n\n"
                 f"Latest observation:\n{observation}\n\n"
                 f"Feasible skills: {', '.join(feasible)}\n"
-                f"Step {environment.step_count + 1}/{max_steps}. Choose one skill."
+                f"Step {environment.step_count + 1}/{max_steps}. Copy one feasible "
+                "skill exactly into skill_option."
             ),
         }
         messages = [system_message, user_message]
@@ -262,6 +311,7 @@ def _play_skill_episode(
         decision_id = f"decision-{len(decisions) + 1}"
         decision_attempts: list[dict] = []
         validation_failure = ""
+        request: SkillRequest | None = None
 
         for attempt_number in range(1, 4):
             attempt = {
@@ -306,7 +356,8 @@ def _play_skill_episode(
                     validation_failure = str(error)
                     attempt["validation_error"] = validation_failure
                 else:
-                    attempt["skill"] = parsed.skill.model_dump()
+                    request = _skill_request(parsed.skill_option, max_skill_steps)
+                    attempt["skill"] = request.model_dump()
             attempts.append(attempt)
             decision_attempts.append(attempt)
             if parsed is not None:
@@ -329,7 +380,7 @@ def _play_skill_episode(
                 },
             ]
 
-        if parsed is None:
+        if parsed is None or request is None:
             termination_reason = "agent_error"
             terminal_error = (
                 f"Three inference attempts failed at game step {environment.step_count}"
@@ -337,12 +388,13 @@ def _play_skill_episode(
             break
 
         state_before = state.model_dump()
-        state = apply_state_patch(state, parsed.state_patch)
+        state_patch = parsed.state_patch.writable_patch()
+        state = apply_state_patch(state, state_patch)
         decision_observation = observation
-        request = parsed.skill.model_copy(
+        request = request.model_copy(
             update={
                 "max_steps": min(
-                    parsed.skill.max_steps,
+                    request.max_steps,
                     max_skill_steps,
                     max_steps - environment.step_count,
                 )
@@ -390,7 +442,7 @@ def _play_skill_episode(
                 "step_ended": environment.step_count,
                 "state_before": state_before,
                 "state_after": state.model_dump(),
-                "state_patch": parsed.state_patch.model_dump(exclude_none=True),
+                "state_patch": state_patch.model_dump(exclude_none=True),
                 "affordances": [item.model_dump() for item in affordances],
                 "skill": request.model_dump(),
                 "status": result.status,
