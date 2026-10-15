@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -22,6 +22,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function LineageTree({ data, onSelectGenome }: Props) {
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [expanded]);
+
   const { nodes, edges } = useMemo(() => {
     const genGroups: Record<number, typeof data.nodes> = {};
     for (const n of data.nodes) {
@@ -87,16 +103,29 @@ export function LineageTree({ data, onSelectGenome }: Props) {
   }
 
   return (
-    <div className="panel lineage-panel">
+    <div className={`panel lineage-panel ${expanded ? "expanded" : ""}`}>
       <div className="lineage-heading">
         <div>
           <span>Evolution map</span>
           <h2>🌳 Lineage Tree</h2>
         </div>
-        <p>{data.nodes.length} candidates · click a candidate to inspect its run</p>
+        <div className="lineage-heading-actions">
+          <p>{data.nodes.length} candidates · click a candidate to inspect its run</p>
+          <button
+            className="lineage-expand-btn"
+            type="button"
+            aria-label={expanded ? "Collapse lineage tree" : "Expand lineage tree"}
+            aria-pressed={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <span aria-hidden="true">{expanded ? "↙" : "↗"}</span>
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
       </div>
       <div className="lineage-canvas">
         <ReactFlow
+          key={expanded ? "expanded" : "inline"}
           nodes={nodes}
           edges={edges}
           onNodeClick={onNodeClick}

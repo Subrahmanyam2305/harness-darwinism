@@ -98,9 +98,9 @@ function App() {
         </div>
       ) : (
         <main>
-          <div className="overview-stack">
-            <LineageTree data={tree} onSelectGenome={handleSelectGenome} />
+          <div className="grid-2">
             <FitnessCurve data={metrics} />
+            <LineageTree data={tree} onSelectGenome={handleSelectGenome} />
           </div>
 
           {/* Game Replay — show when a genome is selected */}
