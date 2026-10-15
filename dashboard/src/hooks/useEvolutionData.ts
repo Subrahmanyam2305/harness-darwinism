@@ -7,15 +7,17 @@ import {
   type MetricPoint,
   type TreeData,
   type GenomeSummary,
+  type AchievementData,
 } from "../api";
 
 export function useEvolutionData(arm = "full", pollInterval = 5000) {
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
   const [tree, setTree] = useState<TreeData>({ nodes: [], edges: [] });
-  const [achievements, setAchievements] = useState<{
-    baseline: Record<string, number>;
-    champion: Record<string, number>;
-  }>({ baseline: {}, champion: {} });
+  const [achievements, setAchievements] = useState<AchievementData>({
+    generations: [],
+    baseline: {},
+    champion: {},
+  });
   const [genomes, setGenomes] = useState<GenomeSummary[]>([]);
   const [loading, setLoading] = useState(true);
 

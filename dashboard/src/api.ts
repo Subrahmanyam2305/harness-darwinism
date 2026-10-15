@@ -50,6 +50,22 @@ export interface TreeData {
   edges: { source: string; target: string }[];
 }
 
+export interface GenerationAchievements {
+  generation: number;
+  achievement_rates: Record<string, number>;
+  evaluated_genomes: number;
+  episode_count: number;
+  seeds: number[];
+  best_score: number;
+  best_genome_id: string;
+}
+
+export interface AchievementData {
+  generations: GenerationAchievements[];
+  baseline: Record<string, number>;
+  champion: Record<string, number>;
+}
+
 export interface ReplayStep {
   step: number;
   decision_id?: string | null;
@@ -154,9 +170,14 @@ export async function fetchTree(arm = "full"): Promise<TreeData> {
 
 export async function fetchAchievements(
   arm = "full"
-): Promise<{ baseline: Record<string, number>; champion: Record<string, number> }> {
+): Promise<AchievementData> {
   const res = await fetch(`${API_BASE}/api/achievements?arm=${arm}`);
-  return res.json();
+  const data = await res.json();
+  return {
+    generations: data.generations ?? [],
+    baseline: data.baseline ?? {},
+    champion: data.champion ?? {},
+  };
 }
 
 export async function fetchGenomeDetail(

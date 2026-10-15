@@ -1,7 +1,7 @@
-interface Props {
-  baseline: Record<string, number>;
-  champion: Record<string, number>;
-}
+import { useState } from "react";
+import type { GenerationAchievements } from "../api";
+
+interface Props { generations: GenerationAchievements[]; }
 
 const ALL_ACHIEVEMENTS = [
   "collect_coal", "collect_diamond", "collect_drink", "collect_iron",
@@ -30,27 +30,49 @@ function AchCell({ label, rate }: { label: string; rate: number }) {
   );
 }
 
-export function AchievementGrid({ baseline, champion }: Props) {
+export function AchievementGrid({ generations }: Props) {
+  const [selectedGeneration, setSelectedGeneration] = useState<number | null>(null);
+  const selected =
+    generations.find((item) => item.generation === selectedGeneration) ??
+    generations.at(-1);
+
+  if (!selected) {
+    return <div className="panel empty">Waiting for a complete generation…</div>;
+  }
+
   return (
-    <div className="panel">
-      <h2>🏅 Achievement Grid</h2>
-      <div className="ach-comparison">
+    <div className="panel achievement-panel">
+      <div className="achievement-heading">
         <div>
-          <h3>Generation 0 (Baseline)</h3>
-          <div className="ach-grid">
-            {ALL_ACHIEVEMENTS.map((a) => (
-              <AchCell key={a} label={a} rate={baseline[a] ?? 0} />
-            ))}
-          </div>
+          <span>Population achievement rate</span>
+          <h2>🏅 Generation {selected.generation} achievements</h2>
         </div>
-        <div>
-          <h3>🏆 Champion</h3>
-          <div className="ach-grid">
-            {ALL_ACHIEVEMENTS.map((a) => (
-              <AchCell key={a} label={a} rate={champion[a] ?? 0} />
-            ))}
-          </div>
-        </div>
+        <p>
+          {selected.evaluated_genomes} genomes · {selected.episode_count} episodes · best {selected.best_score.toFixed(1)}
+        </p>
+      </div>
+      <div className="generation-tabs" role="tablist" aria-label="Completed generations">
+        {generations.map((item) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={item.generation === selected.generation}
+            className={item.generation === selected.generation ? "active" : ""}
+            key={item.generation}
+            onClick={() => setSelectedGeneration(item.generation)}
+          >
+            Gen {item.generation}
+          </button>
+        ))}
+      </div>
+      <div className="ach-grid generation-achievements">
+        {ALL_ACHIEVEMENTS.map((achievement) => (
+          <AchCell
+            key={achievement}
+            label={achievement}
+            rate={selected.achievement_rates[achievement] ?? 0}
+          />
+        ))}
       </div>
     </div>
   );

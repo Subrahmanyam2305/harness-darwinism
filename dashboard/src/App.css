@@ -318,6 +318,66 @@ main {
   letter-spacing: -0.01em;
 }
 
+.achievement-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.achievement-heading span {
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.achievement-heading h2 {
+  margin: 2px 0 0;
+}
+
+.achievement-heading p {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.generation-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+}
+
+.generation-tabs button {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.generation-tabs button:hover {
+  border-color: rgba(100, 210, 255, 0.35);
+  color: var(--text);
+}
+
+.generation-tabs button.active {
+  border-color: rgba(100, 210, 255, 0.45);
+  background: rgba(10, 132, 255, 0.16);
+  color: var(--teal);
+}
+
+.generation-achievements {
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
 .ach-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));

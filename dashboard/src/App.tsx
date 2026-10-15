@@ -121,10 +121,7 @@ function App() {
             )}
           </AnimatePresence>
 
-          <AchievementGrid
-            baseline={achievements.baseline}
-            champion={achievements.champion}
-          />
+          <AchievementGrid generations={achievements.generations} />
 
           <AnimatePresence>
             {selected && (

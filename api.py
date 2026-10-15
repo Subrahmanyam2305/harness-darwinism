@@ -292,16 +292,90 @@ def lineage_tree(arm: str = "full"):
 
 @app.get("/api/achievements")
 def achievement_grid(arm: str = "full"):
-    """Achievement rates for the latest generation's champion vs baseline."""
+    """Achievement rates for every generation with complete episode evidence."""
     db = get_db()
     gs = get_all_genomes(db, arm=arm)
     if not gs:
-        return {"baseline": {}, "champion": {}}
+        return {"generations": [], "baseline": {}, "champion": {}}
 
-    gen0 = [g for g in gs if g.generation == 0]
+    runs_by_genome = {g.id: get_runs_for_genome(db, g.id) for g in gs}
+    generations = _completed_generation_achievements(gs, runs_by_genome)
+
     champions = [g for g in gs if g.status == "champion"]
 
-    baseline_achs = gen0[0].fitness.achievements if gen0 else {}
+    baseline_achs = generations[0]["achievement_rates"] if generations else {}
     champion_achs = champions[-1].fitness.achievements if champions else {}
 
-    return {"baseline": baseline_achs, "champion": champion_achs}
+    return {
+        "generations": generations,
+        "baseline": baseline_achs,
+        "champion": champion_achs,
+    }
+
+
+def _completed_generation_achievements(
+    genomes, runs_by_genome: dict[str, list[dict]]
+) -> list[dict]:
+    """Aggregate episode achievement rates for fully evaluated generations."""
+    by_generation: dict[int, list] = {}
+    for genome in genomes:
+        by_generation.setdefault(genome.generation, []).append(genome)
+
+    completed: list[dict] = []
+    for generation, population in sorted(by_generation.items()):
+        episode_maps: list[dict[int, dict]] = []
+        for genome in population:
+            episodes = {
+                run["seed"]: run
+                for run in runs_by_genome.get(genome.id, [])
+                if run.get("generation") == generation and run.get("seed") is not None
+            }
+            episode_maps.append(episodes)
+
+        expected_seeds = set(episode_maps[0]) if episode_maps else set()
+        if not expected_seeds or any(
+            set(episodes) != expected_seeds for episodes in episode_maps
+        ):
+            continue
+
+        runs = [
+            episodes[seed]
+            for episodes in episode_maps
+            for seed in sorted(expected_seeds)
+        ]
+        achievement_names = {
+            name
+            for run in runs
+            for name in (
+                run.get("achievements")
+                or (run.get("trace") or {}).get("achievements")
+                or {}
+            )
+        }
+        rates = {
+            name: sum(
+                bool(
+                    (
+                        run.get("achievements")
+                        or (run.get("trace") or {}).get("achievements")
+                        or {}
+                    ).get(name)
+                )
+                for run in runs
+            )
+            / len(runs)
+            for name in sorted(achievement_names)
+        }
+        best = max(population, key=lambda genome: genome.fitness.score)
+        completed.append(
+            {
+                "generation": generation,
+                "achievement_rates": rates,
+                "evaluated_genomes": len(population),
+                "episode_count": len(runs),
+                "seeds": sorted(expected_seeds),
+                "best_score": best.fitness.score,
+                "best_genome_id": best.id,
+            }
+        )
+    return completed

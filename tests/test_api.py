@@ -1,6 +1,7 @@
 """Dashboard API serialization checks for legacy and skill-controller runs."""
 
-from api import _serialize_run
+from api import _completed_generation_achievements, _serialize_run
+from src.genome import Fitness, Genome
 
 
 def test_skill_run_exposes_grouped_decisions_and_efficiency_metrics() -> None:
@@ -80,3 +81,47 @@ def test_legacy_run_keeps_unknown_efficiency_fields_unavailable() -> None:
     assert serialized["steps_per_model_call"] is None
     assert serialized["tokens_per_environment_step"] is None
     assert serialized["decisions"] == []
+
+
+def test_achievement_grid_includes_only_fully_evaluated_generations() -> None:
+    genomes = [
+        Genome(id="g0-a", generation=0, fitness=Fitness(score=2.0)),
+        Genome(id="g0-b", generation=0, fitness=Fitness(score=1.0)),
+        Genome(id="g1-a", generation=1),
+        Genome(id="g1-b", generation=1),
+    ]
+    runs = {
+        "g0-a": [
+            {
+                "generation": 0,
+                "seed": 101,
+                "achievements": {"collect_wood": True, "collect_stone": True},
+            }
+        ],
+        "g0-b": [
+            {
+                "generation": 0,
+                "seed": 101,
+                "achievements": {"collect_wood": True, "collect_stone": False},
+            }
+        ],
+        "g1-a": [
+            {
+                "generation": 1,
+                "seed": 101,
+                "achievements": {"collect_wood": True},
+            }
+        ],
+        "g1-b": [],
+    }
+
+    result = _completed_generation_achievements(genomes, runs)
+
+    assert [item["generation"] for item in result] == [0]
+    assert result[0]["achievement_rates"] == {
+        "collect_stone": 0.5,
+        "collect_wood": 1.0,
+    }
+    assert result[0]["evaluated_genomes"] == 2
+    assert result[0]["episode_count"] == 2
+    assert result[0]["best_genome_id"] == "g0-a"
