@@ -1,7 +1,7 @@
 """Persistence contract tests for complete gameplay episode evidence."""
 
 from src.agent import EpisodeTrace
-from src.db import get_run, insert_episode
+from src.db import _format_failure_trace, get_run, insert_episode
 
 
 class FakeCollection:
@@ -46,3 +46,40 @@ def test_complete_episode_round_trips_with_provider_and_replay_evidence() -> Non
     assert stored["artifact_path"] == "data/runs/example"
     assert stored["trace"]["achievements"] == {"collect_wood": True}
     assert stored["created_at"].endswith("+00:00")
+
+
+def test_failure_trace_summarizes_repeated_skills_and_blocked_prerequisites() -> None:
+    run = {
+        "score": 1.3,
+        "termination_reason": "death",
+        "steps": 83,
+        "max_steps": 200,
+        "achievements": {"collect_wood": True, "make_stone_pickaxe": False},
+        "decisions": [
+            {
+                "skill": {"name": "acquire", "target": "stone"},
+                "status": "interrupted",
+                "reason": "no_progress",
+                "affordances": [
+                    {
+                        "option": "build_or_craft:stone_pickaxe",
+                        "feasible": False,
+                        "reason": "missing_workstation:table",
+                    }
+                ],
+            },
+            {
+                "skill": {"name": "acquire", "target": "stone"},
+                "status": "interrupted",
+                "reason": "no_progress",
+                "affordances": [],
+            },
+        ],
+    }
+
+    summary = _format_failure_trace(run)
+
+    assert "termination=death at 83/200 steps" in summary
+    assert "acquire:stone -> no_progress x2" in summary
+    assert "build_or_craft:stone_pickaxe -> missing_workstation:table" in summary
+    assert "missing_achievements=make_stone_pickaxe" in summary

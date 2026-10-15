@@ -15,6 +15,9 @@ SkillName = Literal[
 ]
 SkillStatus = Literal["succeeded", "failed", "interrupted", "exhausted", "terminal"]
 
+FAILURE_COOLDOWN_THRESHOLD = 3
+FAILURE_COOLDOWN_STEPS = 10
+
 MOVE_ACTIONS = ["move_up", "move_right", "move_down", "move_left"]
 MOVE_OFFSETS = {
     "move_left": (-1, 0),
@@ -340,6 +343,43 @@ def assess_skill_affordances(
         )
         for option in options
     ]
+    allowed = set(allowed_actions)
+    offered = set(options)
+    for goal, action in BUILD_ACTIONS.items():
+        option = f"build_or_craft:{goal}"
+        if option in offered:
+            continue
+        if goal not in PLACEMENT_TERRAIN and snapshot.inventory.get(goal, 0) > 0:
+            continue
+        blockers: list[str] = []
+        missing_items = [
+            f"{item}={amount}"
+            for item, amount in BUILD_REQUIREMENTS[goal].items()
+            if snapshot.inventory.get(item, 0) < amount
+        ]
+        if missing_items:
+            blockers.append(f"missing_items:{','.join(missing_items)}")
+        missing_workstations = sorted(
+            workstation
+            for workstation in BUILD_WORKSTATIONS.get(goal, set())
+            if not _has_nearby(snapshot, {workstation})
+        )
+        if missing_workstations:
+            blockers.append(f"missing_workstation:{','.join(missing_workstations)}")
+        if (
+            goal in PLACEMENT_TERRAIN
+            and snapshot.front_kind not in PLACEMENT_TERRAIN[goal]
+        ):
+            blockers.append(f"invalid_front_terrain:{snapshot.front_kind or 'unknown'}")
+        if action not in allowed:
+            blockers.append(f"action_not_allowed:{action}")
+        evidence.append(
+            SkillAffordance(
+                option=option,
+                feasible=False,
+                reason=";".join(blockers) or "requirements_unavailable",
+            )
+        )
     blocked_reasons = {
         "explore": "no_allowed_movement_action",
         "acquire": "no_visible_reachable_resource",
@@ -348,13 +388,45 @@ def assess_skill_affordances(
         "build_or_craft": "requirements_or_action_unavailable",
         "recover": "recovery_not_currently_needed_or_available",
     }
-    offered_families = {option.split(":", 1)[0] for option in options}
+    offered_families = {item.option.split(":", 1)[0] for item in evidence}
     evidence.extend(
         SkillAffordance(option=name, feasible=False, reason=reason)
         for name, reason in blocked_reasons.items()
         if name not in offered_families
     )
     return evidence
+
+
+def apply_failure_cooldowns(
+    affordances: list[SkillAffordance],
+    state: ExecutionState,
+    *,
+    current_step: int,
+) -> list[SkillAffordance]:
+    """Temporarily hide repeatedly failing skills when alternatives exist."""
+    cooled_options = {
+        option
+        for option, failure in state.failed_skills.items()
+        if failure.count >= FAILURE_COOLDOWN_THRESHOLD
+        and failure.last_failure != "local_step_budget_exhausted"
+        and current_step - failure.last_attempt_step < FAILURE_COOLDOWN_STEPS
+    }
+    feasible_options = {item.option for item in affordances if item.feasible}
+    if not cooled_options or feasible_options <= cooled_options:
+        return affordances
+    return [
+        SkillAffordance(
+            option=item.option,
+            feasible=False,
+            reason=(
+                "recent_failure_cooldown:"
+                f"{state.failed_skills[item.option].last_failure}"
+            ),
+        )
+        if item.feasible and item.option in cooled_options
+        else item
+        for item in affordances
+    ]
 
 
 def _next_action(
@@ -426,6 +498,20 @@ def _target_distance(snapshot: CrafterSnapshot, target: str | None) -> int | Non
     return entity.distance if entity is not None else None
 
 
+def _recover_target_distance(snapshot: CrafterSnapshot, need: str | None) -> int | None:
+    target_kinds = {
+        "drink": {"water"},
+        "food": {"cow", "plant"},
+        "health": {"cow", "plant"},
+    }.get(need or "", set())
+    distances = [
+        entity.distance
+        for entity in snapshot.nearby_entities
+        if entity.kind in target_kinds
+    ]
+    return min(distances) if distances else None
+
+
 def _acquire_succeeded(
     target: str | None, before: CrafterSnapshot, after: CrafterSnapshot
 ) -> bool:
@@ -454,8 +540,16 @@ def _build_succeeded(
 def _made_progress(
     request: SkillRequest, before: CrafterSnapshot, after: CrafterSnapshot
 ) -> bool:
-    if request.name == "acquire" and _acquire_succeeded(request.target, before, after):
-        return True
+    if request.name == "acquire":
+        if _acquire_succeeded(request.target, before, after):
+            return True
+        old_distance = _target_distance(before, request.target)
+        new_distance = _target_distance(after, request.target)
+        return (
+            old_distance is not None
+            and new_distance is not None
+            and new_distance < old_distance
+        )
     if request.name == "build_or_craft" and _build_succeeded(
         request.goal, before, after
     ):
@@ -464,17 +558,41 @@ def _made_progress(
         achievement = f"defeat_{request.target}"
         if _achievement_advanced(before, after, achievement):
             return True
-    if request.name == "recover" and after.inventory.get(
-        request.need or "", 0
-    ) > before.inventory.get(request.need or "", 0):
-        return True
+        old_distance = _target_distance(before, request.target)
+        new_distance = _target_distance(after, request.target)
+        return (
+            old_distance is not None
+            and new_distance is not None
+            and new_distance < old_distance
+        )
+    if request.name == "recover":
+        if after.inventory.get(request.need or "", 0) > before.inventory.get(
+            request.need or "", 0
+        ):
+            return True
+        old_distance = _recover_target_distance(before, request.need)
+        new_distance = _recover_target_distance(after, request.need)
+        return (
+            old_distance is not None
+            and new_distance is not None
+            and new_distance < old_distance
+        )
     if request.name == "evade":
         old_distance = _target_distance(before, request.target)
         new_distance = _target_distance(after, request.target)
         return new_distance is None or (
             old_distance is not None and new_distance > old_distance
         )
-    return before.position != after.position
+    if request.name == "explore":
+        return before.position != after.position
+    return False
+
+
+def _skill_key(request: SkillRequest) -> str:
+    """Return the stable runtime key shared with model-visible skill options."""
+    return ":".join(
+        filter(None, [request.name, request.target, request.goal, request.need])
+    )
 
 
 def execute_skill(
@@ -617,10 +735,10 @@ def execute_skill(
         if runtime_state.no_progress_steps >= 3:
             status, reason = "interrupted", "no_progress"
             break
-    if status not in {"succeeded", "terminal"}:
-        key = ":".join(
-            filter(None, [request.name, request.target, request.goal, request.need])
-        )
+    key = _skill_key(request)
+    if status == "succeeded":
+        runtime_state.failed_skills.pop(key, None)
+    elif status != "terminal":
         previous = runtime_state.failed_skills.get(key)
         if previous is None and len(runtime_state.failed_skills) >= 20:
             runtime_state.failed_skills.pop(next(iter(runtime_state.failed_skills)))

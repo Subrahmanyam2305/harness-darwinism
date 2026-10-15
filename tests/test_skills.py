@@ -6,12 +6,18 @@ import pytest
 from pydantic import ValidationError
 
 from src.crafter_env import ALL_ACHIEVEMENTS, CrafterSnapshot, NearbyEntity
-from src.execution_state import ExecutionState, KnownLocation, StatePatch
+from src.execution_state import (
+    ExecutionState,
+    KnownLocation,
+    SkillFailure,
+    StatePatch,
+)
 from src.skills import (
     ACQUIRE_ACHIEVEMENTS,
     BUILD_ACTIONS,
     PLACEMENT_TERRAIN,
     SkillRequest,
+    apply_failure_cooldowns,
     assess_skill_affordances,
     execute_skill,
     feasible_skills,
@@ -239,6 +245,60 @@ def test_affordance_evidence_explains_feasible_and_blocked_skill_families() -> N
     )
 
 
+def test_affordance_evidence_explains_missing_crafting_workstation() -> None:
+    snapshot = _snapshot(inventory={"wood": 2, "stone": 2})
+
+    evidence = assess_skill_affordances(snapshot, ["make_stone_pickaxe"])
+
+    blocked = next(
+        item for item in evidence if item.option == "build_or_craft:stone_pickaxe"
+    )
+    assert blocked.feasible is False
+    assert blocked.reason == "missing_workstation:table"
+
+
+def test_recent_repeated_failure_temporarily_cools_down_skill() -> None:
+    evidence = [
+        *assess_skill_affordances(
+            _snapshot(
+                inventory={"wood": 2, "stone": 2},
+                entities=[
+                    NearbyEntity(
+                        kind="table", direction="west", distance=1, dx=-1, dy=0
+                    )
+                ],
+            ),
+            ["move_right", "make_stone_pickaxe"],
+        )
+    ]
+    state = ExecutionState(
+        failed_skills={
+            "build_or_craft:stone_pickaxe": SkillFailure(
+                count=3, last_failure="no_progress", last_attempt_step=8
+            ),
+            "explore": SkillFailure(
+                count=3,
+                last_failure="local_step_budget_exhausted",
+                last_attempt_step=8,
+            ),
+        }
+    )
+
+    cooled = apply_failure_cooldowns(evidence, state, current_step=10)
+    available_later = apply_failure_cooldowns(evidence, state, current_step=18)
+
+    blocked = next(
+        item for item in cooled if item.option == "build_or_craft:stone_pickaxe"
+    )
+    assert blocked.feasible is False
+    assert blocked.reason == "recent_failure_cooldown:no_progress"
+    assert any(item.option == "explore" and item.feasible for item in cooled)
+    assert any(
+        item.option == "build_or_craft:stone_pickaxe" and item.feasible
+        for item in available_later
+    )
+
+
 def test_execution_state_bounds_model_owned_locations() -> None:
     locations = {
         f"tree-{index}": KnownLocation(
@@ -424,6 +484,27 @@ def test_acquire_skill_executes_multiple_local_steps_until_inventory_increases()
     assert any(check.check == "action_allowlist" for check in result.guard_checks)
     assert observed_actions == result.actions
     assert environment.wood == 1
+
+
+def test_success_clears_prior_failure_for_same_skill() -> None:
+    environment = _FakeSkillEnv()
+    state = ExecutionState(
+        failed_skills={
+            "acquire:tree": SkillFailure(
+                count=3, last_failure="no_progress", last_attempt_step=0
+            )
+        }
+    )
+
+    result = execute_skill(
+        SkillRequest(name="acquire", target="tree", max_steps=4),
+        environment,
+        state,
+        allowed_actions=["move_right", "do"],
+    )
+
+    assert result.status == "succeeded"
+    assert "acquire:tree" not in result.state.failed_skills
 
 
 def test_acquire_does_not_succeed_for_an_unrelated_inventory_change() -> None:

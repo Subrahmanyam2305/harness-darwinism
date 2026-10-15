@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -204,18 +205,100 @@ def get_runs_for_genome(db, genome_id: str) -> list[dict]:
         return [d for d in all_docs if d.get("genome_id") == genome_id]
 
 
+def _decision_skill_option(decision: dict) -> str:
+    skill = decision.get("skill") or {}
+    parts = [skill.get("name")]
+    parts.extend(skill.get(key) for key in ("target", "goal", "need"))
+    return ":".join(str(part) for part in parts if part)
+
+
+def _format_failure_trace(run: dict) -> str:
+    """Compress persisted controller evidence into mutation-ready feedback."""
+    parts = [
+        f"score={float(run.get('score', 0.0)):.3f}",
+        (
+            f"termination={run.get('termination_reason', 'unknown')} at "
+            f"{run.get('steps', 0)}/{run.get('max_steps', '?')} steps"
+        ),
+    ]
+    if run.get("error"):
+        parts.append(f"error={run['error']}")
+
+    failed_decisions: Counter[tuple[str, str]] = Counter()
+    blocked: Counter[tuple[str, str]] = Counter()
+    for decision in run.get("decisions") or []:
+        if decision.get("status") not in {"succeeded", None}:
+            failed_decisions[
+                (_decision_skill_option(decision), decision.get("reason", "unknown"))
+            ] += 1
+        for affordance in decision.get("affordances") or []:
+            if not affordance.get("feasible", False):
+                blocked[
+                    (
+                        affordance.get("option", "unknown"),
+                        affordance.get("reason", "unknown"),
+                    )
+                ] += 1
+
+    if failed_decisions:
+        parts.append(
+            "repeated_failures="
+            + ", ".join(
+                f"{skill} -> {reason} x{count}"
+                for (skill, reason), count in failed_decisions.most_common(5)
+            )
+        )
+    if blocked:
+        blocked_priority = {
+            "recent_failure_cooldown": 0,
+            "missing_workstation": 1,
+            "missing_items": 2,
+        }
+        ranked_blocked = sorted(
+            blocked.items(),
+            key=lambda item: (
+                min(
+                    (
+                        rank
+                        for prefix, rank in blocked_priority.items()
+                        if prefix in item[0][1]
+                    ),
+                    default=3,
+                ),
+                -item[1],
+                item[0],
+            ),
+        )
+        parts.append(
+            "blocked_prerequisites="
+            + ", ".join(
+                f"{option} -> {reason} x{count}"
+                for (option, reason), count in ranked_blocked[:5]
+            )
+        )
+    missing = sorted(
+        achievement
+        for achievement, unlocked in (run.get("achievements") or {}).items()
+        if not unlocked
+    )
+    if missing:
+        parts.append(f"missing_achievements={','.join(missing[:12])}")
+    if len(parts) == 2 and run.get("failure_summary"):
+        parts.append(run["failure_summary"])
+    return ". ".join(parts)
+
+
 def get_failure_traces(db, genome_id: str, limit: int = 3) -> list[str]:
+    """Return detailed evidence from a genome's lowest-scoring runs."""
     if db is not None:
-        runs = db["runs"].find({"genome_id": genome_id}).sort("score", 1).limit(limit)
-        return [r.get("failure_summary", "") for r in runs if r.get("failure_summary")]
+        runs = list(
+            db["runs"].find({"genome_id": genome_id}).sort("score", 1).limit(limit)
+        )
     else:
         runs = get_runs_for_genome(db, genome_id)
         runs.sort(key=lambda r: r.get("score", 0))
-        return [
-            r.get("failure_summary", "")
-            for r in runs[:limit]
-            if r.get("failure_summary")
-        ]
+        runs = runs[:limit]
+    return [_format_failure_trace(run) for run in runs]
 
 
 # ── Ledger ──

@@ -21,8 +21,10 @@ from src.execution_state import (
 from src.gameplay_provider import BedrockProvider, GameplayProvider, ProviderError
 from src.genome import Genome
 from src.skills import (
+    SkillAffordance,
     SkillRequest,
     SkillStep,
+    apply_failure_cooldowns,
     assess_skill_affordances,
     execute_skill,
 )
@@ -156,6 +158,7 @@ def _build_skill_system_prompt(genome: Genome) -> str:
         "## Fixed Game Mechanics",
         "Choose one feasible high-level skill. Python executes its primitive actions and checks the real world after every step.",
         "Do not invent skills or targets outside the supplied feasible list.",
+        "Use blocked-skill reasons and recent failures to avoid repeating an action that cannot currently advance the goal.",
         "Keep goal and subgoal short. World facts in the latest observation override remembered state.",
     ]
     if config.rules:
@@ -244,6 +247,28 @@ def _parse_skill_decision(response: str, feasible: list[str]) -> _SkillDecision:
     return decision
 
 
+def _blocked_feedback(affordances: list[SkillAffordance]) -> str:
+    """Return a bounded, progression-first subset of blocked skill evidence."""
+    blocked = [item for item in affordances if not item.feasible]
+    priority = {
+        "recent_failure_cooldown": 0,
+        "missing_workstation": 1,
+        "missing_items": 2,
+        "invalid_front_terrain": 3,
+        "action_not_allowed": 4,
+    }
+    blocked.sort(
+        key=lambda item: (
+            min(
+                (rank for prefix, rank in priority.items() if prefix in item.reason),
+                default=5,
+            ),
+            item.option,
+        )
+    )
+    return "; ".join(f"{item.option}={item.reason}" for item in blocked[:6]) or "none"
+
+
 def _play_skill_episode(
     genome: Genome,
     seed: int,
@@ -285,8 +310,13 @@ def _play_skill_episode(
     emit(None)
     while environment.step_count < max_steps:
         snapshot = environment.snapshot()
-        affordances = assess_skill_affordances(snapshot, config.tools)
+        affordances = apply_failure_cooldowns(
+            assess_skill_affordances(snapshot, config.tools),
+            state,
+            current_step=snapshot.step,
+        )
         feasible = [item.option for item in affordances if item.feasible]
+        blocked_feedback = _blocked_feedback(affordances)
         if not feasible:
             termination_reason = "agent_error"
             terminal_error = "No feasible skills for the current genome tool allowlist"
@@ -301,6 +331,7 @@ def _play_skill_episode(
                 f"failed_skills={state.failed_skills}, "
                 f"no_progress_steps={state.no_progress_steps}\n\n"
                 f"Latest observation:\n{observation}\n\n"
+                f"Blocked skill feedback: {blocked_feedback}\n\n"
                 f"Feasible skills: {', '.join(feasible)}\n"
                 f"Step {environment.step_count + 1}/{max_steps}. Copy one feasible "
                 "skill exactly into skill_option."

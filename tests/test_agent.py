@@ -277,6 +277,7 @@ def test_skill_prompt_uses_compact_state_without_prior_transcript(monkeypatch) -
     assert all(len(messages) == 2 for messages in captured)
     assert "thought" not in captured[1][0]["content"].lower()
     assert "Execution state" in captured[1][1]["content"]
+    assert "Blocked skill feedback" in captured[1][1]["content"]
     assert [message["role"] for message in captured[1]] == ["system", "user"]
 
 
