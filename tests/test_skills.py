@@ -5,9 +5,12 @@ from dataclasses import dataclass
 import pytest
 from pydantic import ValidationError
 
-from src.crafter_env import CrafterSnapshot, NearbyEntity
+from src.crafter_env import ALL_ACHIEVEMENTS, CrafterSnapshot, NearbyEntity
 from src.execution_state import ExecutionState, KnownLocation, StatePatch
 from src.skills import (
+    ACQUIRE_ACHIEVEMENTS,
+    BUILD_ACTIONS,
+    PLACEMENT_TERRAIN,
     SkillRequest,
     assess_skill_affordances,
     execute_skill,
@@ -15,20 +18,60 @@ from src.skills import (
 )
 
 
+def test_skill_catalog_covers_every_upstream_achievement() -> None:
+    build_achievements = {
+        f"place_{goal}" if goal in PLACEMENT_TERRAIN else f"make_{goal}"
+        for goal in BUILD_ACTIONS
+    }
+    covered = (
+        set(ACQUIRE_ACHIEVEMENTS.values())
+        | build_achievements
+        | {
+            "defeat_zombie",
+            "defeat_skeleton",
+            "wake_up",
+        }
+    )
+
+    assert covered == set(ALL_ACHIEVEMENTS)
+
+
 def _snapshot(
     *,
     step: int = 0,
     wood: int = 0,
     health: int = 9,
+    inventory: dict[str, int] | None = None,
     entities: list[NearbyEntity] | None = None,
     facing: str = "east",
+    front_kind: str | None = "grass",
+    walkable_directions: list[str] | None = None,
+    position: tuple[int, int] = (0, 0),
+    achievements: dict[str, bool] | None = None,
 ) -> CrafterSnapshot:
+    items = {
+        "health": health,
+        "food": 9,
+        "drink": 9,
+        "energy": 9,
+        "wood": wood,
+    }
+    items.update(inventory or {})
     return CrafterSnapshot(
         step=step,
-        inventory={"health": health, "food": 9, "drink": 9, "energy": 9, "wood": wood},
-        achievements={},
+        inventory=items,
+        achievements=achievements or {},
         nearby_entities=entities or [],
         facing=facing,
+        front_kind=front_kind,
+        walkable_directions=walkable_directions
+        or [
+            "move_up",
+            "move_right",
+            "move_down",
+            "move_left",
+        ],
+        position=position,
         daylight=1.0,
         sleeping=False,
     )
@@ -54,7 +97,7 @@ def test_affordances_only_offer_skills_supported_by_current_state() -> None:
 
     assert "explore" in options
     assert "acquire:tree" in options
-    assert "recover:energy" in options
+    assert "recover:energy" not in options
     assert not any(option.startswith("build_or_craft") for option in options)
 
 
@@ -65,6 +108,104 @@ def test_affordances_reject_target_when_required_direction_is_disallowed() -> No
 
     options = feasible_skills(snapshot, allowed_actions=["move_left", "do"])
 
+    assert "acquire:tree" not in options
+
+
+def test_affordances_cover_missing_achievement_actions_when_mechanically_valid() -> (
+    None
+):
+    snapshot = _snapshot(
+        inventory={"wood": 3, "stone": 2, "sapling": 1},
+        entities=[
+            NearbyEntity(kind="table", direction="west", distance=1, dx=-1, dy=0),
+        ],
+    )
+
+    options = feasible_skills(
+        snapshot,
+        allowed_actions=[
+            "move_up",
+            "do",
+            "make_wood_sword",
+            "make_stone_sword",
+            "place_plant",
+            "place_stone",
+        ],
+    )
+
+    assert "acquire:grass" in options
+    assert "build_or_craft:wood_sword" in options
+    assert "build_or_craft:stone_sword" in options
+    assert "build_or_craft:plant" in options
+    assert "build_or_craft:stone" in options
+
+
+def test_affordances_require_tools_workstations_and_valid_placement_terrain() -> None:
+    snapshot = _snapshot(
+        inventory={"wood": 3, "stone": 4, "iron": 1, "coal": 1, "sapling": 1},
+        entities=[
+            NearbyEntity(kind="iron", direction="east", distance=2, dx=2, dy=0),
+            NearbyEntity(kind="table", direction="west", distance=2, dx=-2, dy=0),
+        ],
+        front_kind="water",
+    )
+
+    options = feasible_skills(
+        snapshot,
+        allowed_actions=list(
+            {
+                "move_right",
+                "do",
+                "make_iron_pickaxe",
+                "make_iron_sword",
+                "place_table",
+                "place_furnace",
+                "place_plant",
+                "place_stone",
+            }
+        ),
+    )
+
+    assert "acquire:iron" not in options
+    assert "build_or_craft:iron_pickaxe" not in options
+    assert "build_or_craft:iron_sword" not in options
+    assert "build_or_craft:table" not in options
+    assert "build_or_craft:furnace" not in options
+    assert "build_or_craft:plant" not in options
+    assert "build_or_craft:stone" in options
+
+
+def test_affordances_do_not_offer_a_tool_already_owned() -> None:
+    snapshot = _snapshot(
+        inventory={"wood": 2, "wood_sword": 1},
+        entities=[
+            NearbyEntity(kind="table", direction="west", distance=1, dx=-1, dy=0)
+        ],
+    )
+
+    options = feasible_skills(snapshot, ["make_wood_sword"])
+
+    assert "build_or_craft:wood_sword" not in options
+
+
+def test_affordances_match_runtime_safety_guards() -> None:
+    snapshot = _snapshot(
+        health=2,
+        inventory={"energy": 4},
+        entities=[
+            NearbyEntity(kind="tree", direction="east", distance=1, dx=1, dy=0),
+            NearbyEntity(kind="zombie", direction="west", distance=1, dx=-1, dy=0),
+        ],
+    )
+
+    options = feasible_skills(
+        snapshot,
+        ["move_left", "move_right", "do", "sleep"],
+    )
+
+    assert options
+    assert all(option.startswith(("evade:", "recover:")) for option in options)
+    assert "explore" not in options
     assert "acquire:tree" not in options
 
 
@@ -106,6 +247,7 @@ class _FakeSkillEnv:
         return _snapshot(
             step=self.step_count,
             wood=self.wood,
+            position=(self.step_count, 0),
             entities=[
                 NearbyEntity(
                     kind="tree", direction="east", distance=distance, dx=distance, dy=0
@@ -136,10 +278,45 @@ class _DistantTreeEnv(_FakeSkillEnv):
         return _snapshot(
             step=self.step_count,
             wood=self.wood,
+            position=(self.step_count, 0),
             entities=[
                 NearbyEntity(
                     kind="tree", direction="east", distance=distance, dx=distance, dy=0
                 )
+            ],
+        )
+
+
+@dataclass
+class _WrongInventoryChangeEnv(_FakeSkillEnv):
+    food: int = 9
+
+    def snapshot(self) -> CrafterSnapshot:
+        return _snapshot(
+            step=self.step_count,
+            wood=self.wood,
+            inventory={"food": self.food},
+            entities=[
+                NearbyEntity(kind="tree", direction="east", distance=1, dx=1, dy=0)
+            ],
+        )
+
+    def step(self, action: str):
+        self.step_count += 1
+        self.food -= 1
+        return "vital changed", 0.0, False, {}
+
+
+@dataclass
+class _BlockedDirectPathEnv(_FakeSkillEnv):
+    def snapshot(self) -> CrafterSnapshot:
+        return _snapshot(
+            step=self.step_count,
+            wood=self.wood,
+            position=(0, -self.step_count),
+            walkable_directions=["move_up"],
+            entities=[
+                NearbyEntity(kind="tree", direction="east", distance=2, dx=2, dy=0)
             ],
         )
 
@@ -165,6 +342,21 @@ def test_acquire_skill_executes_multiple_local_steps_until_inventory_increases()
     assert environment.wood == 1
 
 
+def test_acquire_does_not_succeed_for_an_unrelated_inventory_change() -> None:
+    environment = _WrongInventoryChangeEnv()
+
+    result = execute_skill(
+        SkillRequest(name="acquire", target="tree", max_steps=2),
+        environment,
+        ExecutionState(),
+        allowed_actions=["do"],
+    )
+
+    assert result.status != "succeeded"
+    assert result.reason == "local_step_budget_exhausted"
+    assert result.actions == ["do", "do"]
+
+
 def test_moving_closer_to_target_counts_as_progress() -> None:
     environment = _DistantTreeEnv()
 
@@ -177,6 +369,19 @@ def test_moving_closer_to_target_counts_as_progress() -> None:
 
     assert result.status == "succeeded"
     assert result.actions == ["move_right", "move_right", "move_right", "do"]
+
+
+def test_acquire_takes_a_walkable_detour_when_direct_path_is_blocked() -> None:
+    environment = _BlockedDirectPathEnv()
+
+    result = execute_skill(
+        SkillRequest(name="acquire", target="tree", max_steps=1),
+        environment,
+        ExecutionState(),
+        allowed_actions=["move_right", "move_up", "do"],
+    )
+
+    assert result.actions == ["move_up"]
 
 
 def test_skill_stops_before_disallowed_local_action() -> None:

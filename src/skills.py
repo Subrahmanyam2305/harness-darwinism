@@ -15,6 +15,79 @@ SkillName = Literal[
 ]
 SkillStatus = Literal["succeeded", "failed", "interrupted", "exhausted", "terminal"]
 
+MOVE_ACTIONS = ["move_up", "move_right", "move_down", "move_left"]
+ACQUIRE_REQUIREMENTS = {
+    "tree": {},
+    "stone": {"wood_pickaxe": 1},
+    "coal": {"wood_pickaxe": 1},
+    "iron": {"stone_pickaxe": 1},
+    "diamond": {"iron_pickaxe": 1},
+    "water": {},
+    "grass": {},
+    "cow": {},
+    "plant": {},
+}
+ACQUIRE_RESULTS = {
+    "tree": "wood",
+    "stone": "stone",
+    "coal": "coal",
+    "iron": "iron",
+    "diamond": "diamond",
+    "water": "drink",
+    "grass": "sapling",
+    "cow": "food",
+    "plant": "food",
+}
+ACQUIRE_ACHIEVEMENTS = {
+    "tree": "collect_wood",
+    "stone": "collect_stone",
+    "coal": "collect_coal",
+    "iron": "collect_iron",
+    "diamond": "collect_diamond",
+    "water": "collect_drink",
+    "grass": "collect_sapling",
+    "cow": "eat_cow",
+    "plant": "eat_plant",
+}
+BUILD_ACTIONS = {
+    "table": "place_table",
+    "furnace": "place_furnace",
+    "plant": "place_plant",
+    "stone": "place_stone",
+    "wood_pickaxe": "make_wood_pickaxe",
+    "stone_pickaxe": "make_stone_pickaxe",
+    "iron_pickaxe": "make_iron_pickaxe",
+    "wood_sword": "make_wood_sword",
+    "stone_sword": "make_stone_sword",
+    "iron_sword": "make_iron_sword",
+}
+BUILD_REQUIREMENTS = {
+    "table": {"wood": 2},
+    "furnace": {"stone": 4},
+    "plant": {"sapling": 1},
+    "stone": {"stone": 1},
+    "wood_pickaxe": {"wood": 1},
+    "stone_pickaxe": {"wood": 1, "stone": 1},
+    "iron_pickaxe": {"wood": 1, "coal": 1, "iron": 1},
+    "wood_sword": {"wood": 1},
+    "stone_sword": {"wood": 1, "stone": 1},
+    "iron_sword": {"wood": 1, "coal": 1, "iron": 1},
+}
+BUILD_WORKSTATIONS = {
+    "wood_pickaxe": {"table"},
+    "stone_pickaxe": {"table"},
+    "iron_pickaxe": {"table", "furnace"},
+    "wood_sword": {"table"},
+    "stone_sword": {"table"},
+    "iron_sword": {"table", "furnace"},
+}
+PLACEMENT_TERRAIN = {
+    "table": {"grass", "sand", "path"},
+    "furnace": {"grass", "sand", "path"},
+    "plant": {"grass"},
+    "stone": {"grass", "sand", "path", "water", "lava"},
+}
+
 
 class SkillAffordance(BaseModel):
     """One locally computed feasibility decision shown to the model and operator."""
@@ -80,20 +153,65 @@ def _entity(snapshot: CrafterSnapshot, kinds: set[str]) -> NearbyEntity | None:
     )
 
 
-def _move_toward(entity: NearbyEntity) -> str:
+def _has_items(inventory: dict[str, int], requirements: dict[str, int]) -> bool:
+    return all(
+        inventory.get(item, 0) >= amount for item, amount in requirements.items()
+    )
+
+
+def _has_nearby(snapshot: CrafterSnapshot, kinds: set[str]) -> bool:
+    nearby = {
+        entity.kind for entity in snapshot.nearby_entities if entity.distance <= 1
+    }
+    return kinds <= nearby
+
+
+def _safe_moves(snapshot: CrafterSnapshot, allowed_actions: set[str]) -> list[str]:
+    locally_walkable = snapshot.walkable_directions
+    if locally_walkable is None:
+        locally_walkable = MOVE_ACTIONS
+    return [
+        action
+        for action in MOVE_ACTIONS
+        if action in locally_walkable and action in allowed_actions
+    ]
+
+
+def _move_toward(
+    entity: NearbyEntity, snapshot: CrafterSnapshot, allowed_actions: set[str]
+) -> str | None:
+    preferred: list[str] = []
     if entity.dx < 0:
-        return "move_left"
-    if entity.dx > 0:
-        return "move_right"
+        preferred.append("move_left")
+    elif entity.dx > 0:
+        preferred.append("move_right")
     if entity.dy < 0:
-        return "move_up"
-    return "move_down"
+        preferred.append("move_up")
+    elif entity.dy > 0:
+        preferred.append("move_down")
+    safe = _safe_moves(snapshot, allowed_actions)
+    if entity.distance == 1 and len(preferred) == 1:
+        return preferred[0]
+    for action in preferred:
+        if action in safe:
+            return action
+    locally_walkable = snapshot.walkable_directions
+    if locally_walkable is not None and any(
+        action in locally_walkable for action in preferred
+    ):
+        return preferred[0] if preferred else None
+    return safe[0] if safe else (preferred[0] if preferred else None)
 
 
-def _move_away(entity: NearbyEntity) -> str:
+def _move_away(
+    entity: NearbyEntity, snapshot: CrafterSnapshot, allowed_actions: set[str]
+) -> str | None:
     if abs(entity.dx) >= abs(entity.dy):
-        return "move_right" if entity.dx < 0 else "move_left"
-    return "move_down" if entity.dy < 0 else "move_up"
+        preferred = "move_right" if entity.dx < 0 else "move_left"
+    else:
+        preferred = "move_down" if entity.dy < 0 else "move_up"
+    safe = _safe_moves(snapshot, allowed_actions)
+    return preferred if preferred in safe else (safe[0] if safe else None)
 
 
 def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> list[str]:
@@ -102,10 +220,12 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
     options: list[str] = []
     if _next_action(SkillRequest(name="explore"), snapshot, allowed) in allowed:
         options.append("explore")
+    if snapshot.front_kind == "grass" and "do" in allowed:
+        options.append("acquire:grass")
     for entity in snapshot.nearby_entities:
         if (
-            entity.kind
-            in {"tree", "stone", "coal", "iron", "diamond", "cow", "plant", "water"}
+            entity.kind in ACQUIRE_REQUIREMENTS
+            and _has_items(snapshot.inventory, ACQUIRE_REQUIREMENTS[entity.kind])
             and "do" in allowed
             and _next_action(
                 SkillRequest(name="acquire", target=entity.kind), snapshot, allowed
@@ -115,44 +235,44 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
             option = f"acquire:{entity.kind}"
             if option not in options:
                 options.append(option)
-        if entity.kind in {"zombie", "skeleton", "arrow"}:
-            if (
-                _next_action(
-                    SkillRequest(name="evade", target=entity.kind), snapshot, allowed
-                )
-                in allowed
-            ):
-                option = f"evade:{entity.kind}"
-                if option not in options:
-                    options.append(option)
-            if (
-                "do" in allowed
-                and _next_action(
-                    SkillRequest(name="engage", target=entity.kind), snapshot, allowed
-                )
-                in allowed
-            ):
-                option = f"engage:{entity.kind}"
-                if option not in options:
-                    options.append(option)
+        if entity.kind in {"zombie", "skeleton", "arrow", "lava"} and (
+            _next_action(
+                SkillRequest(name="evade", target=entity.kind), snapshot, allowed
+            )
+            in allowed
+        ):
+            option = f"evade:{entity.kind}"
+            if option not in options:
+                options.append(option)
+        if entity.kind in {"zombie", "skeleton"} and (
+            "do" in allowed
+            and _next_action(
+                SkillRequest(name="engage", target=entity.kind), snapshot, allowed
+            )
+            in allowed
+        ):
+            option = f"engage:{entity.kind}"
+            if option not in options:
+                options.append(option)
     inventory = snapshot.inventory
-    build_actions = {
-        "table": ("place_table", inventory.get("wood", 0) >= 2),
-        "furnace": ("place_furnace", inventory.get("stone", 0) >= 4),
-        "wood_pickaxe": ("make_wood_pickaxe", inventory.get("wood", 0) >= 1),
-        "stone_pickaxe": (
-            "make_stone_pickaxe",
-            inventory.get("wood", 0) >= 1 and inventory.get("stone", 0) >= 1,
-        ),
-        "iron_pickaxe": (
-            "make_iron_pickaxe",
-            inventory.get("wood", 0) >= 1
-            and inventory.get("coal", 0) >= 1
-            and inventory.get("iron", 0) >= 1,
-        ),
-    }
-    for goal, (action, ready) in build_actions.items():
-        if ready and action in allowed:
+    for goal, action in BUILD_ACTIONS.items():
+        achievement = f"place_{goal}" if goal in PLACEMENT_TERRAIN else f"make_{goal}"
+        already_complete = snapshot.achievements.get(achievement, False)
+        if goal not in PLACEMENT_TERRAIN:
+            already_complete = already_complete or inventory.get(goal, 0) > 0
+        requirements_met = _has_items(inventory, BUILD_REQUIREMENTS[goal])
+        workstations_met = _has_nearby(snapshot, BUILD_WORKSTATIONS.get(goal, set()))
+        terrain_met = (
+            goal not in PLACEMENT_TERRAIN
+            or snapshot.front_kind in PLACEMENT_TERRAIN[goal]
+        )
+        if (
+            not already_complete
+            and requirements_met
+            and workstations_met
+            and terrain_met
+            and action in allowed
+        ):
             options.append(f"build_or_craft:{goal}")
     for need in ("health", "food", "drink", "energy"):
         request = SkillRequest(name="recover", need=need)
@@ -161,8 +281,25 @@ def feasible_skills(snapshot: CrafterSnapshot, allowed_actions: list[str]) -> li
             and _next_action(request, snapshot, allowed) in allowed
         ):
             options.append(f"recover:{need}")
-    if "sleep" in allowed and "recover:energy" not in options:
+    if (
+        "sleep" in allowed
+        and snapshot.inventory.get("energy", 9) < 9
+        and "recover:energy" not in options
+    ):
         options.append("recover:energy")
+    threat = _entity(snapshot, {"zombie", "skeleton", "arrow", "lava"})
+    if snapshot.inventory.get("health", 9) <= 2:
+        options = [
+            option
+            for option in options
+            if option.split(":", 1)[0] in {"evade", "recover"}
+        ]
+    elif threat is not None and threat.distance <= 1:
+        options = [
+            option
+            for option in options
+            if option.split(":", 1)[0] in {"evade", "engage", "recover"}
+        ]
     return options
 
 
@@ -197,37 +334,26 @@ def assess_skill_affordances(
 def _next_action(
     request: SkillRequest, snapshot: CrafterSnapshot, allowed_actions: set[str]
 ) -> str | None:
-    moves = [
-        action
-        for action in ["move_up", "move_right", "move_down", "move_left"]
-        if action in allowed_actions
-    ]
     if request.name == "explore":
-        return moves[snapshot.step % len(moves)] if moves else None
+        safe_moves = _safe_moves(snapshot, allowed_actions)
+        return safe_moves[snapshot.step % len(safe_moves)] if safe_moves else None
     if request.name in {"acquire", "engage"}:
+        if request.name == "acquire" and request.target == "grass":
+            return "do" if snapshot.front_kind == "grass" else None
         target = _entity(snapshot, {request.target or ""})
         if target is None:
             return None
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
-        return _move_toward(target)
+        return _move_toward(target, snapshot, allowed_actions)
     if request.name == "evade":
         threat = _entity(
-            snapshot, {request.target or "zombie", "zombie", "skeleton", "arrow"}
+            snapshot,
+            {request.target or "zombie", "zombie", "skeleton", "arrow", "lava"},
         )
-        return _move_away(threat) if threat else None
+        return _move_away(threat, snapshot, allowed_actions) if threat else None
     if request.name == "build_or_craft":
-        action = {
-            "table": "place_table",
-            "furnace": "place_furnace",
-            "wood_pickaxe": "make_wood_pickaxe",
-            "stone_pickaxe": "make_stone_pickaxe",
-            "iron_pickaxe": "make_iron_pickaxe",
-            "wood_sword": "make_wood_sword",
-            "stone_sword": "make_stone_sword",
-            "iron_sword": "make_iron_sword",
-        }.get(request.goal or "")
-        return action
+        return BUILD_ACTIONS.get(request.goal or "")
     if request.name == "recover":
         if request.need == "energy":
             return "sleep"
@@ -238,23 +364,76 @@ def _next_action(
         }
         target = _entity(snapshot, target_kinds.get(request.need or "", set()))
         if target is None:
-            return moves[snapshot.step % len(moves)] if moves else None
+            safe_moves = _safe_moves(snapshot, allowed_actions)
+            return safe_moves[snapshot.step % len(safe_moves)] if safe_moves else None
         if target.distance == 1 and snapshot.facing == target.direction:
             return "do"
-        return _move_toward(target)
+        return _move_toward(target, snapshot, allowed_actions)
     return None
 
 
-def _made_progress(
-    before: CrafterSnapshot, after: CrafterSnapshot, reward: float
+def _achievement_unlocked(
+    before: CrafterSnapshot, after: CrafterSnapshot, achievement: str
 ) -> bool:
-    return (
-        reward > 0
-        or before.inventory != after.inventory
-        or before.achievements != after.achievements
-        or before.nearby_entities != after.nearby_entities
-        or before.facing != after.facing
+    return not before.achievements.get(achievement, False) and after.achievements.get(
+        achievement, False
     )
+
+
+def _target_distance(snapshot: CrafterSnapshot, target: str | None) -> int | None:
+    entity = _entity(snapshot, {target or ""})
+    return entity.distance if entity is not None else None
+
+
+def _acquire_succeeded(
+    target: str | None, before: CrafterSnapshot, after: CrafterSnapshot
+) -> bool:
+    if target not in ACQUIRE_RESULTS:
+        return False
+    item = ACQUIRE_RESULTS[target]
+    achievement = ACQUIRE_ACHIEVEMENTS[target]
+    return after.inventory.get(item, 0) > before.inventory.get(
+        item, 0
+    ) or _achievement_unlocked(before, after, achievement)
+
+
+def _build_succeeded(
+    goal: str | None, before: CrafterSnapshot, after: CrafterSnapshot
+) -> bool:
+    if goal not in BUILD_ACTIONS:
+        return False
+    achievement = f"place_{goal}" if goal in PLACEMENT_TERRAIN else f"make_{goal}"
+    if _achievement_unlocked(before, after, achievement):
+        return True
+    return goal not in PLACEMENT_TERRAIN and after.inventory.get(
+        goal, 0
+    ) > before.inventory.get(goal, 0)
+
+
+def _made_progress(
+    request: SkillRequest, before: CrafterSnapshot, after: CrafterSnapshot
+) -> bool:
+    if request.name == "acquire" and _acquire_succeeded(request.target, before, after):
+        return True
+    if request.name == "build_or_craft" and _build_succeeded(
+        request.goal, before, after
+    ):
+        return True
+    if request.name == "engage":
+        achievement = f"defeat_{request.target}"
+        if _achievement_unlocked(before, after, achievement):
+            return True
+    if request.name == "recover" and after.inventory.get(
+        request.need or "", 0
+    ) > before.inventory.get(request.need or "", 0):
+        return True
+    if request.name == "evade":
+        old_distance = _target_distance(before, request.target)
+        new_distance = _target_distance(after, request.target)
+        return new_distance is None or (
+            old_distance is not None and new_distance > old_distance
+        )
+    return before.position != after.position
 
 
 def execute_skill(
@@ -268,7 +447,6 @@ def execute_skill(
     """Execute real actions until the requested skill succeeds or a guard stops it."""
     before = environment.snapshot()
     initial_inventory = dict(before.inventory)
-    initial_achievements = dict(before.achievements)
     actions: list[str] = []
     steps: list[SkillStep] = []
     guard_checks: list[GuardCheck] = []
@@ -353,25 +531,26 @@ def execute_skill(
             on_step(skill_step)
         runtime_state.no_progress_steps = (
             0
-            if _made_progress(snapshot, after, float(reward))
+            if _made_progress(request, snapshot, after)
             else min(20, runtime_state.no_progress_steps + 1)
         )
         if done:
             status, reason = "terminal", "environment_terminal"
             break
-        if request.name == "acquire" and after.inventory != initial_inventory:
-            status, reason = "succeeded", "inventory_changed"
-            break
-        if request.name == "engage" and (
-            float(reward) > 0 or after.achievements != initial_achievements
+        if request.name == "acquire" and _acquire_succeeded(
+            request.target, before, after
         ):
-            status, reason = "succeeded", "combat_progress"
+            status, reason = "succeeded", "target_acquired"
             break
-        if (
-            request.name == "build_or_craft"
-            and after.achievements != initial_achievements
+        if request.name == "engage" and _achievement_unlocked(
+            before, after, f"defeat_{request.target}"
         ):
-            status, reason = "succeeded", "achievement_unlocked"
+            status, reason = "succeeded", "target_defeated"
+            break
+        if request.name == "build_or_craft" and _build_succeeded(
+            request.goal, before, after
+        ):
+            status, reason = "succeeded", "requested_build_completed"
             break
         if request.name == "recover" and after.inventory.get(
             request.need or "", 0
@@ -379,7 +558,7 @@ def execute_skill(
             status, reason = "succeeded", "vital_improved"
             break
         if request.name == "evade":
-            threat = _entity(after, {"zombie", "skeleton", "arrow"})
+            threat = _entity(after, {"zombie", "skeleton", "arrow", "lava"})
             if threat is None or threat.distance >= 3:
                 status, reason = "succeeded", "threat_distance_increased"
                 break

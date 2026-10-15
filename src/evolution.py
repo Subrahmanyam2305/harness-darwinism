@@ -57,90 +57,61 @@ STARTER_RULE_POOL = [
     "Drink water when thirst is low.",
     "Avoid moving at night without a weapon.",
     "Build a furnace after collecting stone and wood.",
+    "Collect a sapling from grass and plant it when safe.",
+    "Craft a sword before deliberately fighting enemies.",
+    "Place stone when that achievement is still unfinished.",
 ]
 
 SeedProfile = Literal["legacy", "strong-v2"]
 
 STRONG_V2_RULE_POOL = [
-    (
-        "Immediately navigate to a visible tree, face it, and use do until "
-        "inventory contains at least 4 wood."
-    ),
-    (
-        "After collecting 4 wood, place one table and, without moving away, "
-        "craft a wood pickaxe and wood sword."
-    ),
-    (
-        "With a wood pickaxe, navigate to visible stone and mine it with do "
-        "until inventory contains at least 4 stone."
-    ),
-    (
-        "After collecting 4 stone, place one furnace and craft a stone pickaxe "
-        "when the required materials are available."
-    ),
-    "If food is 3 or lower, find a visible cow or plant, face it, and use do.",
-    "If drink is 3 or lower, find visible water, face it, and use do.",
-    "If energy is 2 or lower and no enemy is adjacent, sleep.",
-    "At night without a sword, prioritize safety and sleep instead of exploring.",
-    ("When a useful resource is adjacent, face it and use do before moving away."),
-    (
-        "If the same action twice produces no inventory or achievement change, "
-        "choose another direction and reassess the current goal."
-    ),
-    (
-        "After crafting a stone pickaxe, explore for visible coal and iron "
-        "deposits and mine them with do."
-    ),
-    (
-        "After the core tool achievements, pursue unfinished achievements such "
-        "as collecting a sapling, placing a plant, and placing stone."
-    ),
-    (
-        "Fight an adjacent zombie or skeleton with do only when carrying a sword "
-        "and survival vitals are safe."
-    ),
+    "Prioritize unfinished achievements that are feasible in the current state.",
+    "Gather visible resources before wandering farther away.",
+    "Use tables and furnaces when they enable a new tool achievement.",
+    "Craft a sword before deliberately seeking combat.",
+    "Collect a sapling from grass and plant it when a safe opportunity appears.",
+    "Place stone when doing so unlocks a missing achievement without blocking escape.",
+    "If food or drink is 3 or lower, recover before pursuing optional goals.",
+    "Sleep when energy is low and no enemy is adjacent.",
+    "Evade adjacent enemies when health is unsafe or no weapon is available.",
+    "Explore in a new direction when the current target cannot be reached.",
+    "Prefer a missing achievement over repeating one already unlocked.",
+    "Reassess the goal after a skill fails instead of immediately repeating it.",
 ]
 
 STRONG_V2_TEMPLATES = [
     [
-        "Collect 4 wood before pursuing any other non-emergency goal.",
-        (
-            "Place one table, then remain beside it while crafting a wood pickaxe "
-            "and wood sword."
-        ),
-        "Mine at least 4 stone after obtaining the wood pickaxe.",
-        "Place one furnace, then explore for coal and iron with the stone pickaxe.",
-        "Use do only while facing the adjacent resource or creature you intend to use.",
-        "Interrupt resource progression whenever food, drink, or health becomes unsafe.",
-        (
-            "If two repeated actions make no progress, change direction and "
-            "reassess the current resource goal."
-        ),
+        "Keep health, food, and drink safe before pursuing optional achievements.",
+        "Evade nearby enemies unless equipped and healthy enough to fight.",
+        "Sleep when energy is low and the immediate area is safe.",
+        "Gather nearby food and water before long exploration.",
     ],
     [
-        (
-            "Pursue unfinished achievements in this order: collect_wood, "
-            "place_table, make_wood_pickaxe, make_wood_sword, collect_drink, "
-            "collect_sapling, eat_cow, collect_stone, and place_furnace."
-        ),
-        "Use current inventory and unlocked achievements to select exactly one next goal.",
-        "Face an adjacent target before using do; do not spend do on empty tiles.",
-        "Keep food and drink above 3 and energy above 2 before exploring farther.",
-        "Craft immediately after placing a table so its location is not lost.",
-        (
-            "After the core sequence, diversify into place_plant, place_stone, "
-            "sleep and wake, combat, coal, and iron achievements."
-        ),
-        "Abandon an action after two attempts without an inventory or achievement change.",
+        "Prefer crafting and placement actions that unlock a missing achievement.",
+        "Stay near a table or furnace while using the tools it enables.",
+        "Gather materials needed by the next available crafting option.",
+        "Avoid making a tool already held in inventory.",
     ],
     [
-        "First collect 4 wood, place a table, and craft a wood pickaxe and sword.",
-        "Then collect water and food before mining at least 4 stone.",
-        "Place a furnace and search the visible map for coal and iron deposits.",
-        "Treat health, food, or drink at 3 or lower as an emergency priority.",
-        "Fight only while carrying a sword; otherwise move away from enemies.",
-        "Sleep at night when no enemy is adjacent and energy is low.",
-        "Use a different movement direction when repeated actions make no progress.",
+        "Explore for resources and pursue whichever missing achievement becomes feasible.",
+        "Change direction after a failed skill rather than repeating it immediately.",
+        "Collect uncommon resources when they are visible.",
+        "Preserve enough food, drink, and energy to continue exploring.",
+    ],
+    [
+        "Craft a sword before deliberately seeking enemies.",
+        "Fight visible zombies or skeletons only while survival vitals are safe.",
+        "Evade threats that cannot be defeated safely.",
+        "Recover after combat before seeking another enemy.",
+    ],
+    [
+        "Prefer an unfinished achievement whenever its skill is currently feasible.",
+        "Try sapling collection, planting, stone placement, sleep, and combat as opportunities appear.",
+        "Do not repeat completed crafting or placement achievements.",
+        "Reassess after failure and choose a different feasible achievement.",
+    ],
+    [
+        "Stay alive and choose any feasible action that may unlock a new achievement.",
     ],
 ]
 

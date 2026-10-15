@@ -121,6 +121,9 @@ class CrafterSnapshot(BaseModel):
     achievements: dict[str, bool]
     nearby_entities: list[NearbyEntity]
     facing: str
+    position: tuple[int, int] = (0, 0)
+    walkable_directions: list[str] | None = None
+    front_kind: str | None = None
     daylight: float
     sleeping: bool
 
@@ -140,17 +143,48 @@ def _nearby_entities(info: dict) -> list[NearbyEntity]:
             if not (0 <= x < semantic.shape[0] and 0 <= y < semantic.shape[1]):
                 continue
             name = SEMANTIC_NAMES.get(int(semantic[x, y]))
-            if name and name not in {"grass", "path"}:
-                entities.append(
-                    NearbyEntity(
-                        kind=name,
-                        direction=_direction(dy, dx),
-                        distance=max(abs(dy), abs(dx)),
-                        dx=dx,
-                        dy=dy,
-                    )
-                )
+            if not name or name in {"grass", "path"}:
+                continue
+            entity = NearbyEntity(
+                kind=name,
+                direction=_direction(dy, dx),
+                distance=max(abs(dy), abs(dx)),
+                dx=dx,
+                dy=dy,
+            )
+            entities.append(entity)
     return sorted(entities, key=lambda entity: (entity.distance, entity.kind))
+
+
+def _local_movement_context(info: dict) -> tuple[list[str], str | None]:
+    """Return safe adjacent movement actions and the material currently faced."""
+    semantic = info.get("semantic")
+    player_pos = info.get("player_pos")
+    facing = info.get("facing")
+    if semantic is None or player_pos is None or facing is None:
+        return [], None
+    px, py = int(player_pos[0]), int(player_pos[1])
+    directions = {
+        "move_left": (-1, 0),
+        "move_right": (1, 0),
+        "move_up": (0, -1),
+        "move_down": (0, 1),
+    }
+    walkable: list[str] = []
+    for action, (dx, dy) in directions.items():
+        x, y = px + dx, py + dy
+        if (
+            0 <= x < semantic.shape[0]
+            and 0 <= y < semantic.shape[1]
+            and SEMANTIC_NAMES.get(int(semantic[x, y])) in {"grass", "path", "sand"}
+        ):
+            walkable.append(action)
+    fx, fy = int(facing[0]), int(facing[1])
+    front_x, front_y = px + fx, py + fy
+    front_kind = None
+    if 0 <= front_x < semantic.shape[0] and 0 <= front_y < semantic.shape[1]:
+        front_kind = SEMANTIC_NAMES.get(int(semantic[front_x, front_y]))
+    return walkable, front_kind
 
 
 def _info_to_text(info: dict, step: int) -> str:
@@ -354,12 +388,17 @@ class CrafterTextEnv:
             if isinstance(value, (int, float, np.integer, np.floating))
         }
         facing = self.info.get("facing", (0, 0))
+        player_pos = self.info.get("player_pos", (0, 0))
+        walkable_directions, front_kind = _local_movement_context(self.info)
         return CrafterSnapshot(
             step=self._step_count,
             inventory=inventory,
             achievements=self.get_achievements(),
             nearby_entities=_nearby_entities(self.info),
             facing=_direction(int(facing[1]), int(facing[0])),
+            position=(int(player_pos[0]), int(player_pos[1])),
+            walkable_directions=walkable_directions,
+            front_kind=front_kind,
             daylight=float(self.info.get("daylight", 1.0)),
             sleeping=bool(self.info.get("sleeping", False)),
         )
